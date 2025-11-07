@@ -1,0 +1,14 @@
+-- DROP TABLE IF EXISTS event;
+
+CREATE TABLE event(
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(200) NOT NULL,
+    organizedBy VARCHAR(200) NOT NULL,
+    capacity INT NOT NULL,
+    date TIMESTAMP NOT NULL,
+    address VARCHAR(200) NOT NULL,
+    city VARCHAR(200) NOT NULL,
+    state VARCHAR(200) NOT NULL,
+    country VARCHAR(200) NOT NULL
+);
+
