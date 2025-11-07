@@ -11,19 +11,138 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-sql-driver/mysql"
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/joho/godotenv"
-	 "github.com/yeshu2004/go-event-booking/models"
+	"github.com/yeshu2004/go-event-booking/models"
+	"golang.org/x/crypto/bcrypt"
 )
-
-
 
 type Handler struct {
 	db *sql.DB
 }
 
+type AuthInput struct {
+	Email    string `json:"email" binding:"required"`
+	Password string `json:"password" binding:"required"`
+}
+
+func (h *Handler) createUser(c *gin.Context) {
+	var authInput models.User
+
+	if err := c.ShouldBindBodyWithJSON(&authInput); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "json bind error:" + err.Error(),
+		})
+		return
+	}
+
+	var exists bool
+	if err := h.db.QueryRow("SELECTS EXISTS(SELECT 1 FROM users WHERE email = ?),", authInput.Email).Scan(&exists); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	if exists {
+		c.JSON(http.StatusConflict, gin.H{
+			"error": "user already exists with this email",
+		})
+		return
+	}
+
+	hashPassword, err := bcrypt.GenerateFromPassword([]byte(authInput.Password), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+	}
+
+	var user models.User
+	user.FirstName = authInput.FirstName
+	user.LastName = authInput.LastName
+	user.Email = authInput.Email
+	user.Password = string(hashPassword)
+	user.CreatedAt = time.Now()
+	user.UpdatedAt = time.Now()
+
+	query := "INSERT INTO user (first_name, last_name, email, password, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
+	res, err := h.db.Exec(query, &user.FirstName, &user.LastName, &user.Email, &user.Password, &user.CreatedAt, &user.UpdatedAt)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "error registering user:" + err.Error(),
+		})
+		return
+	}
+
+	id, err := res.LastInsertId()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to retrieve event ID: " + err.Error(),
+		})
+		return
+	}
+
+	user.Id = id
+	c.JSON(http.StatusOK, gin.H{
+		"message": fmt.Sprintf("created user with id:%v", id),
+		"data":    user,
+	})
+}
+
+func (h *Handler) loginUser(c *gin.Context) {
+	var authInput AuthInput
+	if err := c.ShouldBindBodyWithJSON(&authInput); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	var user models.User
+	err := h.db.QueryRow("SELECT id, email, password, first_name, last_name FROM users WHERE email = ?",
+		authInput.Email).Scan(&user.Id, &user.Email, &user.Password, &user.FirstName, &user.LastName)
+
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "invalid email or password",
+		})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "database error: " + err.Error(),
+		})
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(authInput.Password)); err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "invalid email or password",
+		})
+		return
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"id":          user.Id,
+		"expiry_time": time.Now().Add(time.Hour * 2).Unix(),
+	})
+	secret := os.Getenv("SECRET")
+	tokenString, err := token.SignedString([]byte(secret))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to generate token"})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "login successful",
+		"token": tokenString,
+	})
+
+}
+
 func welcomeHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
-		"message": "hi welcome",
+		"data": "hi welcome",
 	})
 }
 
@@ -56,7 +175,7 @@ func (h *Handler) createEventHandler(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, gin.H{
 		"message": "event created successfully",
-		"event": gin.H{
+		"data": gin.H{
 			"id":          id,
 			"name":        newEvent.Name,
 			"organizedBy": newEvent.OrganizedBy,
@@ -96,7 +215,7 @@ func (h *Handler) listEventHandler(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "events retrieved",
-		"events":  allEvents,
+		"data":    allEvents,
 	})
 }
 
@@ -130,7 +249,7 @@ func (h *Handler) getEventByCityHandler(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"message": "retrived events by city",
-		"events":  events,
+		"data":    events,
 	})
 
 }
@@ -164,7 +283,7 @@ func (h *Handler) getEventByIdHandler(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": fmt.Sprintf("found event by id:%v", event.Id),
-		"event": event,
+		"data":    event,
 	})
 
 }
@@ -179,7 +298,7 @@ func main() {
 
 	// read event.sql file and create table or can be done through workbench,
 	// but multiple sql commands in one file will fail.
-	// sqlfile, err := os.ReadFile("event.sql")
+	// sqlfile, err := os.ReadFile("sql/event.sql")
 	// if err != nil {
 	// 	log.Fatalf("failed to read event.sql file: %v", err)
 	// }

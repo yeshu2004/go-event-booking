@@ -1,5 +1,4 @@
 -- DROP TABLE IF EXISTS event;
-
 CREATE TABLE event(
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(200) NOT NULL,
@@ -11,4 +10,3 @@ CREATE TABLE event(
     state VARCHAR(200) NOT NULL,
     country VARCHAR(200) NOT NULL
 );
-
