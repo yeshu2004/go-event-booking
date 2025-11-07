@@ -12,19 +12,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-sql-driver/mysql"
 	"github.com/joho/godotenv"
+	 "github.com/yeshu2004/go-event-booking/models"
 )
 
-type Event struct {
-	Id          int64     `json:"id" db:"id"`
-	Name        string    `json:"name" db:"name"`
-	OrganizedBy string    `json:"organizedBy" db:"organizedBy"`
-	Capacity    int64     `json:"capacity" db:"capacity"`
-	Date        time.Time `json:"date" db:"date"`
-	Address     string    `json:"address" db:"address"`
-	City        string    `json:"city" db:"city"`
-	State       string    `json:"state" db:"state"`
-	Country     string    `json:"country" db:"country"`
-}
+
 
 type Handler struct {
 	db *sql.DB
@@ -37,7 +28,7 @@ func welcomeHandler(c *gin.Context) {
 }
 
 func (h *Handler) createEventHandler(c *gin.Context) {
-	var newEvent Event
+	var newEvent models.Event
 
 	if err := c.ShouldBind(&newEvent); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -80,7 +71,7 @@ func (h *Handler) createEventHandler(c *gin.Context) {
 }
 
 func (h *Handler) listEventHandler(c *gin.Context) {
-	var allEvents []Event
+	var allEvents []models.Event
 
 	showQuery := "SELECT * FROM event"
 	rows, err := h.db.Query(showQuery)
@@ -93,7 +84,7 @@ func (h *Handler) listEventHandler(c *gin.Context) {
 	defer rows.Close()
 
 	for rows.Next() {
-		var event Event
+		var event models.Event
 		if err := rows.Scan(&event.Id, &event.Name, &event.OrganizedBy, &event.Capacity, &event.Date, &event.Address, &event.City, &event.State, &event.Country); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "failed to scan rows:" + err.Error(),
@@ -126,9 +117,9 @@ func (h *Handler) getEventByCityHandler(c *gin.Context) {
 		return
 	}
 
-	var events []Event
+	var events []models.Event
 	for rows.Next() {
-		var e Event
+		var e models.Event
 		if err := rows.Scan(&e.Id, &e.Name, &e.OrganizedBy, &e.Capacity, &e.Date, &e.Address, &e.City, &e.State, &e.Country); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "row scan error:" + err.Error(),
@@ -163,7 +154,7 @@ func (h *Handler) getEventByIdHandler(c *gin.Context) {
 
 	query := "SELECT * FROM event WHERE id = ?"
 	row := h.db.QueryRow(query, id)
-	var event Event
+	var event models.Event
 	if err := row.Scan(&event.Id, &event.Name, &event.OrganizedBy, &event.Capacity, &event.Date, &event.Address, &event.City, &event.State, &event.Country); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "row scan error:" + err.Error(),
