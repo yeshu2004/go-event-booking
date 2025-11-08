@@ -135,7 +135,7 @@ func (h *Handler) loginUser(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "login successful",
-		"token": tokenString,
+		"token":   tokenString,
 	})
 
 }
@@ -156,8 +156,8 @@ func (h *Handler) createEventHandler(c *gin.Context) {
 		return
 	}
 
-	createEventQuery := "INSERT INTO event (name, organizedBy, capacity, date, address, city, state, country) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-	res, err := h.db.Exec(createEventQuery, newEvent.Name, newEvent.OrganizedBy, newEvent.Capacity, newEvent.Date, newEvent.Address, newEvent.City, newEvent.State, newEvent.Country)
+	query := "INSERT INTO event (name, organizedBy, capacity, date, address, city, state, country) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+	res, err := h.db.Exec(query, newEvent.Name, newEvent.OrganizedBy, newEvent.Capacity, newEvent.Date, newEvent.Address, newEvent.City, newEvent.State, newEvent.Country)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": err.Error(),
@@ -176,15 +176,16 @@ func (h *Handler) createEventHandler(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{
 		"message": "event created successfully",
 		"data": gin.H{
-			"id":          id,
-			"name":        newEvent.Name,
-			"organizedBy": newEvent.OrganizedBy,
-			"capacity":    newEvent.Capacity,
-			"date":        newEvent.Date,
-			"address":     newEvent.Address,
-			"city":        newEvent.City,
-			"state":       newEvent.State,
-			"county":      newEvent.Country,
+			"id":              id,
+			"name":            newEvent.Name,
+			"organizedBy":     newEvent.OrganizedBy,
+			"capacity":        newEvent.Capacity,
+			"seats_available": newEvent.Capacity,
+			"date":            newEvent.Date,
+			"address":         newEvent.Address,
+			"city":            newEvent.City,
+			"state":           newEvent.State,
+			"county":          newEvent.Country,
 		},
 	})
 }
@@ -288,6 +289,107 @@ func (h *Handler) getEventByIdHandler(c *gin.Context) {
 
 }
 
+// route: /api/book-seats/:event_id
+func (h *Handler) bookSeatForEvent(c *gin.Context) {
+	// fetch the event_id from the params.
+	stringId := c.Param("event_id")
+	eventId, err := strconv.Atoi(stringId)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
+		})
+	}
+
+	// user_id will be through middleware but for rn, let's
+	// get this as random id to proccess the seats.
+	userId := int64(1)
+
+	var b models.Booking
+	if err := c.ShouldBindJSON(&b); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "json binding error:" + err.Error(),
+		})
+		return
+	}
+
+	if b.Seats <= 0 {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "seats must be > 0"})
+        return
+    }
+
+	tx, err := h.db.BeginTx(c, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "begainTx err:" + err.Error(),
+		})
+	}
+	// incase if any failure in between.
+	defer tx.Rollback()
+
+	//check if we do have enough seats_available.
+	var enough bool
+	if err := tx.QueryRowContext(c, "SELECT (seats_available >= ?) FROM event WHERE id = ?", b.Seats, eventId).Scan(&enough); err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "no such event exists",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	if !enough {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "not enough seats available",
+		})
+		return
+	}
+
+	// update the event seats_available
+	query := "UPDATE event SET seats_available = seats_available - ? WHERE id = ?"
+	_, err = tx.ExecContext(c, query, b.Seats, eventId)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+	}
+
+	//  insert record in booking table
+	query = "INSERT INTO booking (event_id, user_id, seats) VALUES (?, ?, ?)"
+	res, err := tx.ExecContext(c, query, eventId, userId, b.Seats)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+	}
+
+	bookingID, _ := res.LastInsertId()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+	}
+
+	if err := tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "commit failed"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "seat booked successfully",
+		"data": gin.H{
+			"booking_id": bookingID,
+			"event_id":   eventId,
+			"user_id":    userId,
+			"seats":      b.Seats,
+		},
+	})
+
+}
+
 func main() {
 	// Connection to Database.
 	db, err := connectDb()
@@ -317,6 +419,8 @@ func main() {
 	// list event by city
 	router.GET("/api/events/search", h.getEventByCityHandler)
 	router.GET("/api/event/:id", h.getEventByIdHandler)
+
+	router.POST("/api/book-seats/:event_id", h.bookSeatForEvent)
 
 	router.Run()
 }
