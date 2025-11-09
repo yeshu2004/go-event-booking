@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/go-sql-driver/mysql"
 	"github.com/golang-jwt/jwt/v4"
@@ -37,9 +38,9 @@ func (h *Handler) createUser(c *gin.Context) {
 	}
 
 	var exists bool
-	if err := h.db.QueryRow("SELECTS EXISTS(SELECT 1 FROM users WHERE email = ?),", authInput.Email).Scan(&exists); err != nil {
+	if err := h.db.QueryRow("SELECT EXISTS(SELECT 1 FROM user WHERE email = ?)", authInput.Email).Scan(&exists); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": err.Error(),
+			"error": "Database error: " + err.Error(),
 		})
 		return
 	}
@@ -141,8 +142,9 @@ func (h *Handler) loginUser(c *gin.Context) {
 }
 
 func welcomeHandler(c *gin.Context) {
+	time.Sleep(time.Second * 5)
 	c.JSON(http.StatusOK, gin.H{
-		"data": "hi welcome",
+		"message": "hi welcome to event booking platform, created to learn :)",
 	})
 }
 
@@ -313,9 +315,9 @@ func (h *Handler) bookSeatForEvent(c *gin.Context) {
 	}
 
 	if b.Seats <= 0 {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "seats must be > 0"})
-        return
-    }
+		c.JSON(http.StatusBadRequest, gin.H{"error": "seats must be > 0"})
+		return
+	}
 
 	tx, err := h.db.BeginTx(c, nil)
 	if err != nil {
@@ -413,7 +415,12 @@ func main() {
 	defer db.Close()
 
 	router := gin.Default()
+	router.Use(cors.Default())
+
 	router.GET("/", welcomeHandler)
+
+	router.POST("api/auth/sign-in", h.createUser)
+
 	router.POST("/api/create-event", h.createEventHandler)
 	router.GET("/api/list-events", h.listEventHandler) // list all events
 	// list event by city

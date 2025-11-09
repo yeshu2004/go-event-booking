@@ -8,6 +8,6 @@ type User struct {
 	LastName  string    `json:"last_name" db:"last_name"`
 	Email     string    `json:"email" db:"email"`
 	Password  string    `json:"password" db:"passowrd"`
-	CreatedAt time.Time `josn:"created_at" db:"created_at"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }
