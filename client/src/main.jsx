@@ -6,6 +6,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister'
 import { persistQueryClient } from '@tanstack/react-query-persist-client'
 
+import {BrowserRouter, Route, Routes} from "react-router"
+import Signup from './pages/Signup.jsx'
+import Login from './pages/Login.jsx'
+
 const queryClient = new QueryClient({
   defaultOptions:{
     queries:{
@@ -21,9 +25,13 @@ const persister = createAsyncStoragePersister({storage: window.localStorage});
 persistQueryClient({queryClient, persister})
 
 createRoot(document.getElementById('root')).render(
-  <StrictMode>
+  <BrowserRouter>
     <QueryClientProvider client={queryClient}>
-      <App />
+      <Routes>
+        <Route path='/' element={<App/>}/>
+        <Route path='/signup' element={<Signup/>}/>
+        <Route path='/login' element={<Login/>}/>
+      </Routes>
     </QueryClientProvider>
-  </StrictMode>,
+  </BrowserRouter>,
 )

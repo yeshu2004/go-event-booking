@@ -1,6 +1,37 @@
 {
-  "first_name": "test",
-  "last_name": "test",
-  "email": "test@test.com",
-  "password": "test"
+  "first_name": "testify",
+  "last_name": "testify",
+  "email": "testify@testify.com",
+  "password": "testify"
 }
+
+
+well i am doing this to write my experiecne while developing and learing(and i am sorry about the spellings and my broken grammers).
+at first i thought of using raw golang, but then i saw an article using gin and it's simplicity got me 
+to use gin...after goorila i am using gin and so far it's amazing (dont have to explicitly meniton manythings)
+
+well then i connected to sql (i don't why i choose sql but i wanted to work on sql db and maybe i could have choose 
+postgree but it is how it is), writted my few routes and evertime you create a route handler function, we do have to start with 
+providing the context to the handler. Also yeah i wanted to perform the transctional queries which actully pushed me 
+to create this project. 
+
+Along the way, figuring out the logic and putting comments to remember and TODO, you will find them if reading in between..
+Testing each route throuh postman then decided to add frontend, choosing react was a good choice so far (i always though go goes with HTMX/HTML
+which i hated to write after moving to reactjs)
+
+Testing the frontend req through fetch and then learning react-query(i knew it but havnt worked on it, so was the time)..
+and it was good to use and i still doubt the advantage of using react-query bcz i though it has defualt caching mech with the key
+but it was not, actully have to store in the localStorage(client's browser max:5-10MB) and for GET req it is simple but for POST req 
+at first glace it was overwhelming seeing so much addition to this(by seeing code example in docs i didnt even think of writing my POST req using 
+useMutation i.e react-query), maybe later i would try to understand and write that
+
+today let's try to work on middleware and login user(btw i am liking this, writing about what i am doing, ps i know no one will ever read this shit)
+you have to pass this everytime:
+headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`   // This is what c.GetHeader() reads!
+  },
+till now working: singin, login...
+well for now i was creating the protect route for frotnend and to get the token from the localStorage, could use useState & useEffecr but for every page 
+i have to do this and i have worked prev with authContext of react hook but you know, let's explore zustand (famous status management solution).
+

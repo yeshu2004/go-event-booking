@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -27,6 +28,66 @@ type AuthInput struct {
 	Password string `json:"password" binding:"required"`
 }
 
+func (h *Handler) middleware(c *gin.Context) {
+	authHeader := c.GetHeader("Authorization")
+
+	if authHeader == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Authorization header is missing",
+		})
+		return
+	}
+
+	authToken := strings.Split(authHeader, " ")
+	if len(authHeader) > 2 || authToken[0] != "Bearer" {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Invalid token format",
+		})
+		return
+	}
+
+	tokenStr := authToken[1]
+	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return []byte(os.Getenv("SECRET")), nil
+	})
+
+	if err != nil || !token.Valid {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Invalid or expired token",
+		})
+		return
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Invalid token",
+		})
+		return
+	}
+
+	if float64(time.Now().Unix()) > claims["expiry_time"].(float64) {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "token expired",
+		})
+		return
+	}
+
+	var user models.User
+	query := "SELECT * FROM user WHERE ID = ?"
+	if err := h.db.QueryRow(query, claims["id"]).Scan(&user.Id, &user.FirstName, &user.LastName, &user.Email); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+	}
+
+	c.Set("current_user", user)
+	c.Next()
+}
+
 func (h *Handler) createUser(c *gin.Context) {
 	var authInput models.User
 
@@ -36,6 +97,7 @@ func (h *Handler) createUser(c *gin.Context) {
 		})
 		return
 	}
+	log.Println(authInput)
 
 	var exists bool
 	if err := h.db.QueryRow("SELECT EXISTS(SELECT 1 FROM user WHERE email = ?)", authInput.Email).Scan(&exists); err != nil {
@@ -87,7 +149,12 @@ func (h *Handler) createUser(c *gin.Context) {
 	user.Id = id
 	c.JSON(http.StatusOK, gin.H{
 		"message": fmt.Sprintf("created user with id:%v", id),
-		"data":    user,
+		"data": gin.H{
+			"id":         user.Id,
+			"first_name": user.FirstName,
+			"last_name":  user.LastName,
+			"email":      user.Email,
+		},
 	})
 }
 
@@ -101,7 +168,7 @@ func (h *Handler) loginUser(c *gin.Context) {
 	}
 
 	var user models.User
-	err := h.db.QueryRow("SELECT id, email, password, first_name, last_name FROM users WHERE email = ?",
+	err := h.db.QueryRow("SELECT id, email, password, first_name, last_name FROM user WHERE email = ?",
 		authInput.Email).Scan(&user.Id, &user.Email, &user.Password, &user.FirstName, &user.LastName)
 
 	if err == sql.ErrNoRows {
@@ -136,7 +203,12 @@ func (h *Handler) loginUser(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "login successful",
-		"token":   tokenString,
+		"data": gin.H{
+			"id":        user.Id,
+			"full_name": user.FirstName + " " + user.LastName,
+			"email":     user.Email,
+			"token":     tokenString,
+		},
 	})
 
 }
@@ -207,7 +279,7 @@ func (h *Handler) listEventHandler(c *gin.Context) {
 
 	for rows.Next() {
 		var event models.Event
-		if err := rows.Scan(&event.Id, &event.Name, &event.OrganizedBy, &event.Capacity, &event.Date, &event.Address, &event.City, &event.State, &event.Country); err != nil {
+		if err := rows.Scan(&event.Id, &event.Name, &event.OrganizedBy, &event.Capacity, &event.SeatsAvailable, &event.Date, &event.Address, &event.City, &event.State, &event.Country); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "failed to scan rows:" + err.Error(),
 			})
@@ -419,10 +491,11 @@ func main() {
 
 	router.GET("/", welcomeHandler)
 
-	router.POST("api/auth/sign-in", h.createUser)
+	router.POST("api/auth/sign-in", h.createUser) //working 
+	router.POST("api/auth/login", h.loginUser) //working
 
 	router.POST("/api/create-event", h.createEventHandler)
-	router.GET("/api/list-events", h.listEventHandler) // list all events
+	router.GET("/api/list-events", h.middleware , h.listEventHandler) // list all events
 	// list event by city
 	router.GET("/api/events/search", h.getEventByCityHandler)
 	router.GET("/api/event/:id", h.getEventByIdHandler)
