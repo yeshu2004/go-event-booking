@@ -35,3 +35,4 @@ till now working: singin, login...
 well for now i was creating the protect route for frotnend and to get the token from the localStorage, could use useState & useEffecr but for every page 
 i have to do this and i have worked prev with authContext of react hook but you know, let's explore zustand (famous status management solution).
 
+also zustand is pretty simple, actully i dont have to say localStorage.setItem to do, it does this for me..
