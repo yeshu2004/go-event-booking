@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { useAuthStore } from "../store/auth";
+import { useAuthStore } from "../../store/auth";
 
 function Login() {
   const [email, setEmail] = useState("");
@@ -22,11 +22,11 @@ function Login() {
       });
 
       const data = await res.json();
-      console.log(data);
+      console.log(data); // remove
 
       if (!res.ok) {
         if (res.status == 401) {
-          setError("invaild username or passoword");
+          setError("invaild email or passoword");
         }
         setError(data.error || "Something went wrong. Please try again.");
         return;
@@ -75,7 +75,7 @@ function Login() {
         </button>
         <div className="italic text-center">
           don't have account,{" "}
-          <Link to={"/signup"} className="underline">
+          <Link to="/user/signup" className="underline">
             register now
           </Link>
         </div>

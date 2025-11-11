@@ -1,6 +1,6 @@
 // Signup.jsx
 import { useState } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 
 function Signup() {
   const [firstName, setFirstName] = useState("");
@@ -30,7 +30,7 @@ function Signup() {
       });
 
       const data = await res.json();
-      console.log(data);
+      console.log(data); //remove
 
       if (!res.ok) {
         if (res.status === 409) {
@@ -46,7 +46,7 @@ function Signup() {
       setEmail("");
       setPassword("");
 
-      navigate("/login");
+      navigate("user/login");
     } catch (err) {
       setError("Network error. Please check your connection.");
       console.error(err);
@@ -158,9 +158,9 @@ function Signup() {
 
         <p className="text-center text-sm text-gray-600">
           Already have an account?{" "}
-          <a href="/login" className="text-blue-600 hover:underline">
+          <Link to={"/user/login"} className="text-blue-600 hover:underline">
             Log in
-          </a>
+          </Link>
         </p>
       </form>
     </div>

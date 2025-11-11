@@ -28,6 +28,7 @@ type AuthInput struct {
 	Password string `json:"password" binding:"required"`
 }
 
+// for user
 func (h *Handler) middleware(c *gin.Context) {
 	authHeader := c.GetHeader("Authorization")
 
@@ -93,6 +94,7 @@ func (h *Handler) middleware(c *gin.Context) {
 	c.Next()
 }
 
+// for user
 func (h *Handler) createUser(c *gin.Context) {
 	var authInput models.User
 
@@ -163,6 +165,7 @@ func (h *Handler) createUser(c *gin.Context) {
 	})
 }
 
+// for user
 func (h *Handler) loginUser(c *gin.Context) {
 	var authInput AuthInput
 	if err := c.ShouldBindBodyWithJSON(&authInput); err != nil {
@@ -205,7 +208,7 @@ func (h *Handler) loginUser(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to generate token"})
 	}
-	log.Println("while login",tokenString)
+	log.Println("while login", tokenString)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "login successful",
@@ -217,6 +220,197 @@ func (h *Handler) loginUser(c *gin.Context) {
 		},
 	})
 
+}
+
+// for organization
+func (h *Handler) createOrganization(c *gin.Context) {
+	var authInput models.Organization
+	if err := c.ShouldBindJSON(&authInput); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "json bind error:" + err.Error(),
+		})
+		return
+	}
+
+	var exists bool
+	if err := h.db.QueryRow("SELECT EXISTS(SELECT 1 FROM organization WHERE email = ?)", authInput.Email).Scan(&exists); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Database error: " + err.Error(),
+		})
+		return
+	}
+
+	if exists {
+		c.JSON(http.StatusConflict, gin.H{
+			"error": "organization already exists with this email",
+		})
+		return
+	}
+
+	hashPassword, err := bcrypt.GenerateFromPassword([]byte(authInput.Password), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	var org models.Organization
+	org.OrgName = authInput.OrgName
+	org.Email = authInput.Email
+	org.Password = string(hashPassword)
+	org.Description = authInput.Description
+	org.CreatedAt = time.Now()
+
+	query := "INSERT INTO organization (org_name, email, password, description, created_at) VALUES (?, ?, ?, ?, ?)"
+	rows, err := h.db.Exec(query, org.OrgName, org.Email, org.Password, org.Description, org.CreatedAt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	id, err := rows.LastInsertId()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": fmt.Sprintf("created organization with id:%v", id),
+		"data": gin.H{
+			"id":         id,
+			"org_name":   org.OrgName,
+			"created_at": org.CreatedAt,
+		},
+	})
+
+}
+
+// for organization
+func (h *Handler) loginOrganization(c *gin.Context) {
+	var authInput AuthInput
+	if err := c.ShouldBindBodyWithJSON(&authInput); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	var org models.Organization
+	err := h.db.QueryRow("SELECT id, org_name, email, password, description FROM organization WHERE email = ?",
+		authInput.Email).Scan(&org.Id, &org.OrgName, &org.Email, &org.Password, &org.Description)
+
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "invalid email or password",
+		})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "database error: " + err.Error(),
+		})
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(org.Password), []byte(authInput.Password)); err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "invalid email or password",
+		})
+		return
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"id":          org.Id,
+		"expiry_time": time.Now().Add(time.Hour * 2).Unix(),
+	})
+	secret := os.Getenv("ORG_SECRET")
+	tokenString, err := token.SignedString([]byte(secret))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to generate token"})
+	}
+	log.Println("while login", tokenString)
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "login successful",
+		"data": gin.H{
+			"id":       org.Id,
+			"org_name": org.OrgName,
+			"email":    org.Email,
+			"token":    tokenString,
+		},
+	})
+
+}
+
+// for organization
+func (h *Handler) orgMiddleware(c *gin.Context) {
+	authHeader := c.GetHeader("Authorization")
+
+	if authHeader == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Authorization header is missing",
+		})
+		c.Abort()
+		return
+	}
+
+	authToken := strings.Split(authHeader, " ")
+	if len(authToken) != 2 || authToken[0] != "Bearer" || authToken[1] == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token format"})
+		c.Abort()
+		return
+	}
+
+	tokenStr := authToken[1]
+	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return []byte(os.Getenv("ORG_SECRET")), nil
+	})
+
+	if err != nil || !token.Valid {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Invalid or expired token",
+		})
+		c.Abort()
+		return
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Invalid token",
+		})
+		c.Abort()
+		return
+	}
+
+	if float64(time.Now().Unix()) > claims["expiry_time"].(float64) {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "token expired",
+		})
+		c.Abort()
+		return
+	}
+
+	var org models.Organization
+	query := "SELECT * FROM organization WHERE ID = ?"
+	if err := h.db.QueryRow(query, claims["id"]).Scan(&org.Id, &org.OrgName, &org.Email, &org.Password, &org.Description, &org.CreatedAt); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+		c.Abort()
+		return
+	}
+
+	c.Set("current_org", org)
+	c.Next()
 }
 
 func welcomeHandler(c *gin.Context) {
@@ -507,11 +701,14 @@ func main() {
 	router.Use(gin.Logger())
 	router.GET("/", welcomeHandler)
 
-	router.POST("api/auth/sign-in", h.createUser) //working
-	router.POST("api/auth/login", h.loginUser)    //working
+	router.POST("/api/auth/organization/register", h.createOrganization)// postman working
+	router.POST("/api/auth/organization/login", h.loginOrganization)// postman working
+	router.POST("/api/create-event",h.orgMiddleware, h.createEventHandler)
 
-	router.POST("/api/create-event", h.createEventHandler)
-	router.GET("/api/events", h.middleware, h.listEventHandler) // list all events
+	router.POST("/api/auth/sign-in", h.createUser)               //working
+	router.POST("/api/auth/login", h.loginUser)                  //working
+	router.GET("/api/events", h.middleware, h.listEventHandler) // list all events, working
+
 	// list event by city
 	router.GET("/api/events/search", h.getEventByCityHandler)
 	router.GET("/api/event/:id", h.getEventByIdHandler)

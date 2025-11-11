@@ -5,6 +5,13 @@
   "password": "testify"
 }
 
+{
+  "org_name": "DevConf Pro",
+  "email": "organizers@devconfpro.com",
+  "password": "SecurePassword123!",
+  "description": "Premium event management for developer conferences, hackathons, and technical workshops covering blockchain, machine learning, full-stack development, and emerging technologies.",
+}
+
 
 well i am doing this to write my experiecne while developing and learing(and i am sorry about the spellings and my broken grammers).
 at first i thought of using raw golang, but then i saw an article using gin and it's simplicity got me 
