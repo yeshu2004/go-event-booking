@@ -1,19 +1,19 @@
 import { useQuery } from "@tanstack/react-query";
-import { useAuthStore } from "../store/auth";
+import { useUserAuthStore } from ".././store/useUserAuth";
 
 function Events() {
-  const { token, isLoggedIn } = useAuthStore();
-  const logout = useAuthStore((state) => state.logout);
+  const { userToken, isUserLoggedIn } = useUserAuthStore();
+  const logoutUser = useUserAuthStore((state) => state.logoutUser);
 
   const getEvents = async () => {
-    if (!token) {
+    if (!userToken) {
       throw new Error("No token available");
     }
 
     const response = await fetch("http://localhost:8080/api/events", {
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${userToken}`,
       },
     });
     if (!response.ok) {
@@ -29,10 +29,10 @@ function Events() {
   const { status, data, error } = useQuery({
     queryKey: ["events"],
     queryFn: getEvents,
-    enabled: isLoggedIn && !!token,
+    enabled: isUserLoggedIn && !!userToken,
   });
 
-  if (!isLoggedIn) return <div>please login to continue...</div>;
+  if (!isUserLoggedIn) return <div>oops user, please login to continue...</div>;
   console.log(data);
 
   return (
@@ -40,7 +40,7 @@ function Events() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Upcoming Events</h1>
         <button
-          onClick={logout}
+          onClick={logoutUser}
           className="text-blue-600 hover:text-blue-800 underline text-sm"
         >
           Logout

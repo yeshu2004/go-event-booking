@@ -43,3 +43,13 @@ well for now i was creating the protect route for frotnend and to get the token 
 i have to do this and i have worked prev with authContext of react hook but you know, let's explore zustand (famous status management solution).
 
 also zustand is pretty simple, actully i dont have to say localStorage.setItem to do, it does this for me..
+
+well idk if I am starting it back correctly, lastly ended up with removing the cache from localStorage through react query and learned about the staletime 
+and cachetime...how they works and default config... Then I worked on the frontend, fetching the user and switching back to backend to make organisation 
+as a different schema...like login as user ( who can register for events ) and login as organisation ( who can publish events) and implemented it by making 
+new middle ware for organisational routes having different secret key and in frontend modified old auth.js, which is break down into userAuth and orgAuth 
+both having different token and login/logout functionality for best abstraction...I can do by assigning roles but let's try this...was successfully completed 
+to login the organisation and then redirect to the dashboard(ps thinking about the role and different auth management with zustand was time taking but was fun). 
+also though of implementing the follow/unfollow for updates and notification about events to user....where I added a Boolean flag along with userid and orgid
+i.e. subscribed which will help in toggling and not deleting the entry everytime (could batch and delete) bcz every time deleting a single entry will 
+rebalance the b+tree and toggling will help

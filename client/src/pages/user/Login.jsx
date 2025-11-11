@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { useAuthStore } from "../../store/auth";
+import { useUserAuthStore } from "../../store/useUserAuth";
 
 function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  const login = useAuthStore((state)=> state.login);
+  const loginUser = useUserAuthStore((state)=> state.loginUser);
   const navigate = useNavigate();
 
   async function handleSubmit(e) {
@@ -33,7 +33,7 @@ function Login() {
       }
       
       
-      login(data.data.token)
+      loginUser(data.data.token)
       setEmail("");
       setPassword("");
       navigate("/events");

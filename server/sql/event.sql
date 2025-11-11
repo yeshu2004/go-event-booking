@@ -3,7 +3,7 @@
 CREATE TABLE event (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(200) NOT NULL,
-    organizedBy VARCHAR(200) NOT NULL,
+    organizedBy INT NOT NULL,
     capacity INT NOT NULL CHECK (capacity >= 0),
     seats_available INT NOT NULL CHECK (seats_available >= 0),
     date TIMESTAMP NOT NULL,
@@ -11,6 +11,8 @@ CREATE TABLE event (
     city VARCHAR(200) NOT NULL,
     state VARCHAR(200) NOT NULL,
     country VARCHAR(200) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (organizedBy) REFERENCES organization(id) ON DELETE CASCADE, 
     CONSTRAINT chk_seats CHECK (seats_available <= capacity)
 );
 

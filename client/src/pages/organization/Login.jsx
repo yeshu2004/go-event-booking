@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { useAuthStore } from "../../store/auth";
+import { useOrgAuthStore } from "../../store/useOrgAuth";
 
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const login = useAuthStore((state)=>state.login)
+  const loginOrg = useOrgAuthStore((state)=>state.loginOrg)
 
   const navigate = useNavigate();
 
@@ -36,11 +36,11 @@ const Login = () => {
         setError(data.error || "Something went wrong. Please try again.");
         return;
       }
-      login(data.data.token)
+      loginOrg(data.data.token)
       setEmail("");
       setPassword("");
       setLoading(false);
-      navigate("/");
+      navigate("/dashboard");
     } catch (err) {
       setError("Network error. Please check your connection.");
       console.error(err);
