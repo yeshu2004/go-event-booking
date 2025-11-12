@@ -473,12 +473,12 @@ func (h *Handler) createEventHandler(c *gin.Context) {
 		})
 		return
 	}
-	query := "INSERT INTO event (name, organizedBy, capacity, date, address, city, state, country) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-    res, err := h.db.Exec(query, newEvent.Name, org.Id, newEvent.Capacity, newEvent.Date, newEvent.Address, newEvent.City, newEvent.State, newEvent.Country)
-    if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-        return
-    }
+	query := "INSERT INTO event (name, org_id, organized_by, capacity, date, address, city, state, country) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+	res, err := h.db.Exec(query, newEvent.Name, org.Id, org.OrgName, newEvent.Capacity, newEvent.Date, newEvent.Address, newEvent.City, newEvent.State, newEvent.Country)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 
 	id, err := res.LastInsertId()
 	if err != nil {
@@ -493,7 +493,8 @@ func (h *Handler) createEventHandler(c *gin.Context) {
 		"data": gin.H{
 			"id":              id,
 			"name":            newEvent.Name,
-			"organizedBy":     org.Id,
+			"orgId":           org.Id,
+			"organizedBy":     org.OrgName,
 			"capacity":        newEvent.Capacity,
 			"seats_available": newEvent.Capacity,
 			"date":            newEvent.Date,
@@ -501,6 +502,58 @@ func (h *Handler) createEventHandler(c *gin.Context) {
 			"city":            newEvent.City,
 			"state":           newEvent.State,
 			"county":          newEvent.Country,
+		},
+	})
+}
+
+func (h *Handler) aboutOrganization(c *gin.Context) {
+	strId := c.Param("id")
+	orgId, err := strconv.Atoi(strId)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	var org models.Organization
+	orgQuery := "SELECT org_name, email, description, created_at FROM organization WHERE id = ?"
+	if err = h.db.QueryRow(orgQuery, orgId).Scan(&org.OrgName, &org.Email, &org.Description, &org.CreatedAt); err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Organization not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch organization"})
+		return
+	}
+
+	eventQuery := "SELECT id, name, date, city, state, country, created_at FROM event WHERE org_id = ?"
+	rows, err := h.db.Query(eventQuery, orgId)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to fetch events:" + err.Error(),
+		})
+		return
+	}
+	defer rows.Close()
+
+	var events []models.Event
+	for rows.Next() {
+		var e models.Event
+		if err := rows.Scan(&e.Id, &e.Name, &e.Date, &e.City, &e.State, &e.Country, &e.CreatedAt); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "failed to scan event:" + err.Error(),
+			})
+			return
+		}
+		events = append(events, e)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "successful",
+		"data": gin.H{
+			"organization": org,
+			"events":       events,
 		},
 	})
 }
@@ -521,7 +574,7 @@ func (h *Handler) listEventHandler(c *gin.Context) {
 
 	for rows.Next() {
 		var event models.Event
-		if err := rows.Scan(&event.Id, &event.Name, &event.OrganizedBy, &event.Capacity, &event.SeatsAvailable, &event.Date, &event.Address, &event.City, &event.State, &event.Country); err != nil {
+		if err := rows.Scan(&event.Id, &event.Name, &event.OrgId, &event.OrganizedBy, &event.Capacity, &event.SeatsAvailable, &event.Date, &event.Address, &event.City, &event.State, &event.Country, &event.CreatedAt); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "failed to scan rows:" + err.Error(),
 			})
@@ -706,7 +759,6 @@ func (h *Handler) bookSeatForEvent(c *gin.Context) {
 
 }
 
-
 func welcomeHandler(c *gin.Context) {
 	time.Sleep(time.Second * 5)
 	c.JSON(http.StatusOK, gin.H{
@@ -751,14 +803,15 @@ func main() {
 	router.Use(gin.Logger())
 	router.GET("/", welcomeHandler)
 
-	router.POST("/api/auth/organization/register", h.createOrganization) // working
-	router.POST("/api/auth/organization/login", h.loginOrganization)     // working
+	router.POST("/api/auth/organization/register", h.createOrganization)    // working
+	router.POST("/api/auth/organization/login", h.loginOrganization)        // working
 	router.POST("/api/create-event", h.orgMiddleware, h.createEventHandler) // working
 	router.POST("/api/subscribe", h.orgMiddleware, h.subscribeHandler)
 
-	router.POST("/api/auth/sign-in", h.createUser)              //working
-	router.POST("/api/auth/login", h.loginUser)                 //working
-	router.GET("/api/events", h.middleware, h.listEventHandler) // list all events, working
+	router.POST("/api/auth/sign-in", h.createUser)                           // working
+	router.POST("/api/auth/login", h.loginUser)                              // working
+	router.GET("/api/events", h.middleware, h.listEventHandler)              // working ( TODO: public route -- frontend work )
+	router.GET("/about/organization/:id", h.middleware, h.aboutOrganization) // working ( TODO: public route -- frontend work )
 
 	// list event by city
 	router.GET("/api/events/search", h.getEventByCityHandler)

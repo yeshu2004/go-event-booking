@@ -53,3 +53,6 @@ to login the organisation and then redirect to the dashboard(ps thinking about t
 also though of implementing the follow/unfollow for updates and notification about events to user....where I added a Boolean flag along with userid and orgid
 i.e. subscribed which will help in toggling and not deleting the entry everytime (could batch and delete) bcz every time deleting a single entry will 
 rebalance the b+tree and toggling will help
+
+update organizedBy as org_name and add org_id in table
+added about organisation route by id and will implement follow button logic soon. 

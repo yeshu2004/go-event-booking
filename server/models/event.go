@@ -5,7 +5,8 @@ import "time"
 type Event struct {
 	Id             int64     `json:"id" db:"id"`
 	Name           string    `json:"name" db:"name"`
-	OrganizedBy    int64     `json:"organizedBy" db:"organizedBy"`
+	OrgId          int64     `json:"org_id" db:"org_id"`
+	OrganizedBy    string    `json:"organized_by" db:"organized_by"`
 	Capacity       int64     `json:"capacity" db:"capacity"`
 	SeatsAvailable int64     `json:"seats_available" db:"seats_available"`
 	Date           time.Time `json:"date" db:"date"`

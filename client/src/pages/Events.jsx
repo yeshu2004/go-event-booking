@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router";
 import { useUserAuthStore } from ".././store/useUserAuth";
 
 function Events() {
@@ -76,24 +77,30 @@ function Events() {
               </h3>
               <p className="text-sm text-gray-600 mt-1">
                 Organized by{" "}
-                <span className="font-medium">{event.organizedBy}</span>
+                <Link
+                  to={`/about/organisations/${event.org_id}`}
+                  className="font-medium underline"
+                >
+                  {event.organized_by}
+                </Link>
               </p>
 
               <div className="mt-3 space-y-1 text-sm text-gray-700">
                 <p>
-                  <span className="font-medium">Date:{" "}</span>
+                  <span className="font-medium">Date: </span>
                   <span>
                     {new Date(event.date).toLocaleDateString("en-IN", {
                       day: "numeric",
                       month: "long",
                       year: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
+                      // hour: "2-digit",
+                      // minute: "2-digit",
                     })}
                   </span>
                 </p>
-                <p><span className="font-medium">Location:{" "}</span>
-                  {event.address}, {event.city}, {event.state}, {event.country}
+                <p>
+                  <span className="font-medium">Location: </span>
+                  {event.city.trim()}, {event.state}, {event.country}
                 </p>
               </div>
 
@@ -104,6 +111,11 @@ function Events() {
                 <span className="font-medium">
                   {event.seats_available} seats left
                 </span>
+              </div>
+              <div className="pt-2 text-sm underline">
+                <div>
+                  <Link to={"/"}>Know more</Link>
+                </div>
               </div>
             </div>
           ))}

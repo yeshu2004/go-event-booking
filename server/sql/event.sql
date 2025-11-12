@@ -1,9 +1,9 @@
--- DROP TABLE IF EXISTS event;
 
 CREATE TABLE event (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(200) NOT NULL,
-    organizedBy INT NOT NULL,
+    org_id INT NOT NULL,
+    organized_by VARCHAR(200) NOT NULL,
     capacity INT NOT NULL CHECK (capacity >= 0),
     seats_available INT NOT NULL CHECK (seats_available >= 0),
     date TIMESTAMP NOT NULL,
@@ -12,11 +12,10 @@ CREATE TABLE event (
     state VARCHAR(200) NOT NULL,
     country VARCHAR(200) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (organizedBy) REFERENCES organization(id) ON DELETE CASCADE, 
+    FOREIGN KEY (org_id) REFERENCES organization(id) ON DELETE CASCADE, 
     CONSTRAINT chk_seats CHECK (seats_available <= capacity)
 );
 
--- seats_available = capacity on insert
 DELIMITER //
 CREATE TRIGGER trg_event_set_seats
 BEFORE INSERT ON event

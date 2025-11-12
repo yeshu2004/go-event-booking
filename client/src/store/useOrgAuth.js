@@ -8,5 +8,5 @@ export const useOrgAuthStore = create(
     loginOrg: (token) => set({ orgToken: token, isOrgLoggedIn: true }),
     logoutOrg: () => set({ orgToken: null, isOrgLoggedIn: false }),
   })),
-  { token: "orgToken" }
+  { name: "orgToken" }
 );
