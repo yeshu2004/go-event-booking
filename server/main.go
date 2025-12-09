@@ -644,7 +644,7 @@ func (h *Handler) getEventByIdHandler(c *gin.Context) {
 	query := "SELECT * FROM event WHERE id = ?"
 	row := h.db.QueryRow(query, id)
 	var event models.Event
-	if err := row.Scan(&event.Id, &event.Name, &event.OrganizedBy, &event.Capacity, &event.Date, &event.Address, &event.City, &event.State, &event.Country); err != nil {
+	if err := row.Scan(&event.Id, &event.Name, &event.OrgId, &event.OrganizedBy, &event.Capacity, &event.SeatsAvailable, &event.Date, &event.Address, &event.City, &event.State, &event.Country, &event.CreatedAt); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "row scan error:" + err.Error(),
 		})
@@ -806,16 +806,16 @@ func main() {
 	router.POST("/api/auth/organization/register", h.createOrganization)    // working
 	router.POST("/api/auth/organization/login", h.loginOrganization)        // working
 	router.POST("/api/create-event", h.orgMiddleware, h.createEventHandler) // working
-	router.POST("/api/subscribe", h.orgMiddleware, h.subscribeHandler)
+	router.POST("/api/subscribe", h.orgMiddleware, h.subscribeHandler)      // TODO
 
 	router.POST("/api/auth/sign-in", h.createUser)                           // working
 	router.POST("/api/auth/login", h.loginUser)                              // working
 	router.GET("/api/events", h.middleware, h.listEventHandler)              // working ( TODO: public route -- frontend work )
 	router.GET("/about/organization/:id", h.middleware, h.aboutOrganization) // working ( TODO: public route -- frontend work )
+	router.GET("/api/event/:id", h.getEventByIdHandler)                      // working (public route)
 
 	// list event by city
 	router.GET("/api/events/search", h.getEventByCityHandler)
-	router.GET("/api/event/:id", h.getEventByIdHandler)
 
 	router.POST("/api/book-seats/:event_id", h.bookSeatForEvent)
 

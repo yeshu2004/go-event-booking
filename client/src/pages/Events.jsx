@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router";
+import { Link, Links } from "react-router";
 import { useUserAuthStore } from ".././store/useUserAuth";
+import { FaArrowRight } from "react-icons/fa6";
 
 function Events() {
   const { userToken, isUserLoggedIn } = useUserAuthStore();
@@ -37,7 +38,7 @@ function Events() {
   console.log(data);
 
   return (
-    <div className="p-5">
+    <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Upcoming Events</h1>
         <button
@@ -69,14 +70,14 @@ function Events() {
       )}
 
       {status == "success" && data.data.length > 0 && (
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid gap-6 md:grid-cols-3 w-full">
           {data.data.map((event) => (
-            <div key={event.id} className="border rounded-sm p-5">
-              <h3 className="text-xl font-semibold text-gray-900">
-                {event.name}
-              </h3>
-              <p className="text-sm text-gray-600 mt-1">
-                Organized by{" "}
+            <div key={event.id} className="">
+              <div className="bg-black h-[30vh] w-full">
+
+              </div>
+              <p className="text-xs text-gray-600 mt-1">
+                By{" "}
                 <Link
                   to={`/about/organisations/${event.org_id}`}
                   className="font-medium underline"
@@ -84,8 +85,26 @@ function Events() {
                   {event.organized_by}
                 </Link>
               </p>
+              <h3 className="text-xl font-semibold text-gray-900">
+                {event.name}
+              </h3>
+              <div className="pt-2 flex items-center justify-between">
+                <div className="leading-none">
+                  <h5>Ticket</h5>
+                  <h2>{new Date(event.date).toLocaleDateString("en-IN", {
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
+                      // hour: "2-digit",
+                      // minute: "2-digit",
+                    })}</h2>
+                </div>
+                <div className="-rotate-45">
+                  <FaArrowRight />
+                </div>
+              </div>
 
-              <div className="mt-3 space-y-1 text-sm text-gray-700">
+              {/* <div className="mt-3 space-y-1 text-sm text-gray-700">
                 <p>
                   <span className="font-medium">Date: </span>
                   <span>
@@ -102,20 +121,11 @@ function Events() {
                   <span className="font-medium">Location: </span>
                   {event.city.trim()}, {event.state}, {event.country}
                 </p>
-              </div>
-
-              <div className="mt-4 flex justify-between items-center text-sm">
-                <span className="text-gray-600">
-                  Capacity: <strong>{event.capacity}</strong>
-                </span>
-                <span className="font-medium">
-                  {event.seats_available} seats left
-                </span>
-              </div>
-              <div className="pt-2 text-sm underline">
-                <div>
-                  <Link to={"/"}>Know more</Link>
-                </div>
+              </div> */}
+              <div className="pt-2">
+                <Link to={`/about/event/${event.id}`} className=" w-full text-center">
+                  <button className="w-full bg-orange-600 text-white py-1 font-semibold hover:bg-orange-500 cursor-pointer">Know More!</button>
+                </Link>
               </div>
             </div>
           ))}

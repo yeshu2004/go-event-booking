@@ -46,7 +46,7 @@ function Signup() {
       setEmail("");
       setPassword("");
 
-      navigate("user/login");
+      navigate("/user/login");
     } catch (err) {
       setError("Network error. Please check your connection.");
       console.error(err);

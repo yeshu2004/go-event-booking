@@ -14,6 +14,7 @@ import Register from './pages/organization/Register.jsx'
 import OrgLogin from './pages/organization/Login.jsx'
 import Dashboard from './pages/organization/Dashboard.jsx'
 import AboutOrg from './pages/AboutOrg.jsx'
+import Event from './pages/Event.jsx'
 
 const queryClient = new QueryClient()
 
@@ -29,6 +30,7 @@ createRoot(document.getElementById('root')).render(
         <Route path='/dashboard' element={<Dashboard/>}/>
         <Route path='/events' element={<Events/>}/>
         <Route path='/about/organisations/:orgId' element={<AboutOrg/>}/>
+        <Route path='/about/event/:event_id' element={<Event/>}/>
       </Routes>
     </QueryClientProvider>
   </BrowserRouter>,
