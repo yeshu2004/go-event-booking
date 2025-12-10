@@ -473,6 +473,14 @@ func (h *Handler) createEventHandler(c *gin.Context) {
 		})
 		return
 	}
+
+	newEvent.Name = strings.TrimSpace(newEvent.Name)
+	newEvent.Address = strings.TrimSpace(newEvent.Address)
+	newEvent.City = strings.TrimSpace(newEvent.City)
+	newEvent.State = strings.TrimSpace(newEvent.State)
+	newEvent.Country = strings.TrimSpace(newEvent.Country)
+	newEvent.Name = strings.TrimSpace(newEvent.Name)
+
 	query := "INSERT INTO event (name, org_id, organized_by, capacity, date, address, city, state, country) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
 	res, err := h.db.Exec(query, newEvent.Name, org.Id, org.OrgName, newEvent.Capacity, newEvent.Date, newEvent.Address, newEvent.City, newEvent.State, newEvent.Country)
 	if err != nil {
@@ -591,14 +599,11 @@ func (h *Handler) listEventHandler(c *gin.Context) {
 
 // TODO: pagination(limit & offset), wrong city
 func (h *Handler) getEventByCityHandler(c *gin.Context) {
-	city := c.Query("city")
-	if city == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "city is required"})
-		return
-	}
+	s := strings.TrimSpace(c.Param("city"))
+	state := strings.ToTitle(s)
 
-	query := "SELECT * FROM event WHERE city = ?"
-	rows, err := h.db.Query(query, city)
+	q := "SELECT * FROM event WHERE city = ?"
+	rows, err := h.db.Query(q, state);
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": err.Error(),
@@ -609,7 +614,7 @@ func (h *Handler) getEventByCityHandler(c *gin.Context) {
 	var events []models.Event
 	for rows.Next() {
 		var e models.Event
-		if err := rows.Scan(&e.Id, &e.Name, &e.OrganizedBy, &e.Capacity, &e.Date, &e.Address, &e.City, &e.State, &e.Country); err != nil {
+		if err := rows.Scan(&e.Id, &e.Name, &e.OrgId, &e.OrganizedBy, &e.Capacity, &e.SeatsAvailable, &e.Date, &e.Address, &e.City, &e.State, &e.Country, &e.CreatedAt); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "row scan error:" + err.Error(),
 			})
@@ -621,7 +626,6 @@ func (h *Handler) getEventByCityHandler(c *gin.Context) {
 		"message": "retrived events by city",
 		"data":    events,
 	})
-
 }
 
 func (h *Handler) getEventByIdHandler(c *gin.Context) {
@@ -813,9 +817,7 @@ func main() {
 	router.GET("/api/events", h.middleware, h.listEventHandler)              // working ( TODO: public route -- frontend work )
 	router.GET("/about/organization/:id", h.middleware, h.aboutOrganization) // working ( TODO: public route -- frontend work )
 	router.GET("/api/event/:id", h.getEventByIdHandler)                      // working (public route)
-
-	// list event by city
-	router.GET("/api/events/search", h.getEventByCityHandler)
+	router.GET("/api/events/:city", h.getEventByCityHandler)
 
 	router.POST("/api/book-seats/:event_id", h.bookSeatForEvent)
 

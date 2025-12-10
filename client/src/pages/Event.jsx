@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { FaArrowRight } from "react-icons/fa6";
 import { Link, useParams } from "react-router";
 
 function Event() {
@@ -115,10 +116,11 @@ function Event() {
             </div>
 
             {/* CTA */}
-            <div className="mt-10">
-              <button className="px-6 py-3 bg-indigo-600 text-white hover:bg-indigo-700 transition">
-                Book Your Seat
-              </button>
+            <div className="mt-10 w-fit">
+              <Link to={`/event/book-seat/${data.data.id}`} className="px-6 py-3 flex items-center gap-2 bg-indigo-600 text-white hover:bg-indigo-700 transition">
+                <div>Book Your Seat</div>
+                <div className=""><FaArrowRight/></div> 
+              </Link>
             </div>
           </div>
         </div>

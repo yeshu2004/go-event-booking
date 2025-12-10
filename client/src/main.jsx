@@ -15,6 +15,7 @@ import OrgLogin from './pages/organization/Login.jsx'
 import Dashboard from './pages/organization/Dashboard.jsx'
 import AboutOrg from './pages/AboutOrg.jsx'
 import Event from './pages/Event.jsx'
+import BookSeat from './pages/BookSeat.jsx'
 
 const queryClient = new QueryClient()
 
@@ -23,14 +24,18 @@ createRoot(document.getElementById('root')).render(
     <QueryClientProvider client={queryClient}>
       <Routes>
         <Route path='/' element={<App/>}/>
-        <Route path='/user/signup' element={<Signup/>}/>
-        <Route path='/user/login' element={<Login/>}/>
+        {/* for organization*/}
         <Route path='/organization/signup' element={<Register/>}/>
         <Route path='/organization/login' element={<OrgLogin/>}/>
         <Route path='/dashboard' element={<Dashboard/>}/>
-        <Route path='/events' element={<Events/>}/>
         <Route path='/about/organisations/:orgId' element={<AboutOrg/>}/>
+        {/* for user -- unprotected*/}
+        <Route path='/user/signup' element={<Signup/>}/>
+        <Route path='/user/login' element={<Login/>}/>
+        <Route path='/events' element={<Events/>}/>
         <Route path='/about/event/:event_id' element={<Event/>}/>
+        {/* for user -- protected*/}
+        <Route path='/event/book-seat/:event_id' element={<BookSeat/>}/>
       </Routes>
     </QueryClientProvider>
   </BrowserRouter>,
