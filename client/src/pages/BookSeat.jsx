@@ -4,10 +4,10 @@ import { useUserAuthStore } from "../store/useUserAuth"
 function BookSeat() {
     const {isUserLoggedIn } = useUserAuthStore();
 
-    if (!isUserLoggedIn) return <div className="p-5 text-center w-full">oops user, please login to Book ticket...<Link to={"/user/login"} className="text-blue-600">login</Link></div>;
+    if (!isUserLoggedIn) return <div className="p-5 text-center w-full">oops user, please login to Book ticket...</div>
 
   return (
-    <div>BookSeat</div>
+    <div className="pt-16 px-5">BookSeat</div>
   )
 }
 

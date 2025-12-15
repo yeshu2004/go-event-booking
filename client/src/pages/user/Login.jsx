@@ -12,8 +12,12 @@ function Login() {
 
   const [searchParams] = useSearchParams();
   const redirectParam = searchParams.get("redirect");
-
-  const redirectTo = redirectParam && redirectParam !== "/user/signup" ? redirectParam : "/events";
+  let redirectTo = "/";
+  if(redirectParam == "/"){
+    redirectTo =  "/events"
+  }else{
+    redirectTo = redirectParam || "/events"
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -48,7 +52,7 @@ function Login() {
   }
 
   return (
-    <div className="pt-10 flex items-center justify-center bg-gray-50">
+    <div className="h-screen flex items-center justify-center bg-gray-50 ">
       <form onSubmit={handleSubmit} className="p-8 border rounded shadow-md">
         {error && (
           <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">

@@ -28,7 +28,7 @@ function Events() {
   console.log(data);
 
   return (
-    <div className="p-6">
+    <div className="px-5 pt-16">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Upcoming Events</h1>
       </div>
@@ -54,7 +54,7 @@ function Events() {
       )}
 
       {status == "success" && data.data.length > 0 && (
-        <div className="grid gap-6 md:grid-cols-3 w-full">
+        <div className="grid gap-6 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 w-full">
           {data.data.map((event) => (
             <div key={event.id} className="">
               <div className="bg-black h-[30vh] w-full">

@@ -50,14 +50,26 @@ function Event() {
       {status === "success" && (
         <div className="w-full">
           {/* HERO SECTION */}
-          <div className="relative h-[60vh] w-full bg-black flex items-center justify-center">
+          <div className="relative h-[60vh] w-full bg-black/60 flex items-center justify-center">
+            <div>
+              <img
+                src="https://images.unsplash.com/photo-1505373877841-8d25f7d46678?q=80&w=1112&auto=format&fit=crop"
+                alt="Event banner"
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+            </div>
             <div className="relative z-10 text-center px-6">
               <h1 className="text-4xl md:text-5xl font-bold text-white uppercase">
                 {data.data.name}
               </h1>
               <p className="text-gray-300 mt-3 text-lg">
                 Organized by:{" "}
-                <Link to={`/about/organisations/${data.data.org_id}`} className="font-semibold">{data.data.organized_by}</Link>
+                <Link
+                  to={`/about/organisations/${data.data.org_id}`}
+                  className="font-semibold"
+                >
+                  {data.data.organized_by}
+                </Link>
               </p>
             </div>
           </div>
@@ -117,9 +129,14 @@ function Event() {
 
             {/* CTA */}
             <div className="mt-10 w-fit">
-              <Link to={`/event/book-seat/${data.data.id}`} className="px-6 py-3 flex items-center gap-2 bg-indigo-600 text-white hover:bg-indigo-700 transition">
+              <Link
+                to={`/event/book-seat/${data.data.id}`}
+                className="px-6 py-3 flex items-center gap-2 bg-indigo-600 text-white hover:bg-indigo-700 transition"
+              >
                 <div>Book Your Seat</div>
-                <div className=""><FaArrowRight/></div> 
+                <div className="">
+                  <FaArrowRight />
+                </div>
               </Link>
             </div>
           </div>

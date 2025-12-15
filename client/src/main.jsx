@@ -30,6 +30,7 @@ createRoot(document.getElementById("root")).render(
           <Route path="/user/login" element={<Login />} />
           <Route path="/events" element={<Events />} />
           <Route path="/about/event/:event_id" element={<Event />} />
+          <Route path="/about/organisations/:orgId" element={<AboutOrg />} />
           {/* protected*/}
           <Route path="/event/book-seat/:event_id" element={<BookSeat />} />
         </Route>
@@ -38,7 +39,6 @@ createRoot(document.getElementById("root")).render(
           <Route path="/organization/signup" element={<Register />} />
           <Route path="/organization/login" element={<OrgLogin />} />
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/about/organisations/:orgId" element={<AboutOrg />} />
         </Route>
       </Routes>
     </QueryClientProvider>

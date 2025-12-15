@@ -1,20 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate, useParams } from "react-router";
-import { useUserAuthStore } from "../store/useUserAuth";
-import { useEffect } from "react";
+import { Link,useParams } from "react-router";
+import { FaArrowRight } from "react-icons/fa6";
 
 const AboutOrg = () => {
   const param = useParams();
-  const { userToken, isUserLoggedIn } = useUserAuthStore();
-  const logoutUser = useUserAuthStore((state) => state.logoutUser);
-  const navigate = useNavigate();
-
-
-   useEffect(() => {
-      if (!isUserLoggedIn) {
-        navigate("/user/login", { replace: true });
-      }
-    }, [isUserLoggedIn, navigate]);
 
   const fetchDetails = async () => {
     const response = await fetch(
@@ -22,7 +11,6 @@ const AboutOrg = () => {
       {
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${userToken}`,
         },
       }
     );
@@ -44,10 +32,7 @@ const AboutOrg = () => {
   console.log(data);
 
   return (
-    <div className="p-5">
-        <div>
-            <button className="underline pb-2" onClick={logoutUser}>Logout</button>
-        </div>
+    <div className="px-5 pt-18">
       {status == "pending" && (
         <div className="text-center">
           <p className="text-gray-500">Loading about organization...</p>
@@ -90,10 +75,43 @@ const AboutOrg = () => {
           </div>
 
           <div className="pt-10">
-            <h1 className="lg">Upcoming events</h1>
-            <hr />
-            <div>
-                {/* TODO: about page event card  */}
+            <h1 className="text-lg font-medium">Upcoming events</h1>
+            <div className="grid gap-6 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 w-full pt-5">
+              {data.data.events.map((event) => (
+                <div key={event.id} className="">
+                  <div className="bg-black h-[30vh] w-full"></div>
+                  <h3 className="text-xl font-semibold text-gray-900">
+                    {event.name}
+                  </h3>
+                  <div className="pt-2 flex items-center justify-between">
+                    <div className="leading-none">
+                      <h5>Ticket</h5>
+                      <h2>
+                        {new Date(event.date).toLocaleDateString("en-IN", {
+                          day: "numeric",
+                          month: "long",
+                          year: "numeric",
+                          // hour: "2-digit",
+                          // minute: "2-digit",
+                        })}
+                      </h2>
+                    </div>
+                    <div className="-rotate-45">
+                      <FaArrowRight />
+                    </div>
+                  </div>
+                  <div className="pt-2">
+                    <Link
+                      to={`/about/event/${event.id}`}
+                      className=" w-full text-center"
+                    >
+                      <button className="w-full bg-orange-600 text-white py-1 font-semibold hover:bg-orange-500 cursor-pointer">
+                        Know More!
+                      </button>
+                    </Link>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>

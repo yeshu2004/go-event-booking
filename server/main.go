@@ -603,7 +603,7 @@ func (h *Handler) getEventByCityHandler(c *gin.Context) {
 	state := strings.ToTitle(s)
 
 	q := "SELECT * FROM event WHERE city = ?"
-	rows, err := h.db.Query(q, state);
+	rows, err := h.db.Query(q, state)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": err.Error(),
@@ -812,13 +812,13 @@ func main() {
 	router.POST("/api/create-event", h.orgMiddleware, h.createEventHandler) // working
 	router.POST("/api/subscribe", h.orgMiddleware, h.subscribeHandler)      // TODO
 
-	router.POST("/api/auth/sign-in", h.createUser)                           // working
-	router.POST("/api/auth/login", h.loginUser)                              // working
-	router.GET("/api/events", h.listEventHandler)              // working ( TODO: public route -- frontend work )
-	router.GET("/about/organization/:id", h.middleware, h.aboutOrganization) // working ( TODO: public route -- frontend work )
-	router.GET("/api/event/:id", h.getEventByIdHandler)                      // working (public route)
-	router.GET("/api/events/:city", h.getEventByCityHandler)
+	router.POST("/api/auth/sign-in", h.createUser)             // working
+	router.POST("/api/auth/login", h.loginUser)                // working
+	router.GET("/api/events", h.listEventHandler)              // working
+	router.GET("/about/organization/:id", h.aboutOrganization) // working
+	router.GET("/api/event/:id", h.getEventByIdHandler)        // working 
 
+	router.GET("/api/events/:city", h.getEventByCityHandler)
 	router.POST("/api/book-seats/:event_id", h.bookSeatForEvent)
 
 	router.Run()
