@@ -814,7 +814,7 @@ func main() {
 
 	router.POST("/api/auth/sign-in", h.createUser)                           // working
 	router.POST("/api/auth/login", h.loginUser)                              // working
-	router.GET("/api/events", h.middleware, h.listEventHandler)              // working ( TODO: public route -- frontend work )
+	router.GET("/api/events", h.listEventHandler)              // working ( TODO: public route -- frontend work )
 	router.GET("/about/organization/:id", h.middleware, h.aboutOrganization) // working ( TODO: public route -- frontend work )
 	router.GET("/api/event/:id", h.getEventByIdHandler)                      // working (public route)
 	router.GET("/api/events/:city", h.getEventByCityHandler)

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { useUserAuthStore } from "../../store/useUserAuth";
 
 function Login() {
@@ -7,8 +7,13 @@ function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  const loginUser = useUserAuthStore((state)=> state.loginUser);
+  const loginUser = useUserAuthStore((state) => state.loginUser);
   const navigate = useNavigate();
+
+  const [searchParams] = useSearchParams();
+  const redirectParam = searchParams.get("redirect");
+
+  const redirectTo = redirectParam && redirectParam !== "/user/signup" ? redirectParam : "/events";
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -31,12 +36,11 @@ function Login() {
         setError(data.error || "Something went wrong. Please try again.");
         return;
       }
-      
-      
-      loginUser(data.data.token)
+
+      loginUser(data.data.token);
       setEmail("");
       setPassword("");
-      navigate("/events");
+      navigate(redirectTo);
     } catch (err) {
       setError("Network error. Please check your connection.");
       console.error(err);
