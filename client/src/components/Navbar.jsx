@@ -4,6 +4,7 @@ import { useState } from "react";
 import { IoIosMenu } from "react-icons/io";
 import { RxCross2 } from "react-icons/rx";
 import { motion, AnimatePresence } from "framer-motion";
+
 function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   console.log(isOpen);
@@ -13,7 +14,7 @@ function Navbar() {
   const location = useLocation();
   return (
     <>
-      <div className="fixed top-0 w-full z-50 font-medium">
+      <div className="top-0 w-full font-medium border-b">
         <div className="flex items-center justify-between px-5 py-4">
           {/* left */}
           <div>
@@ -25,9 +26,9 @@ function Navbar() {
           <div className="hidden items-center gap-5 md:flex">
             <Link to={"/events"}>Explore Events</Link>
             {/* <Link to={""}>About Us</Link> */}
-            <Link to={""}>
-              {isUserLoggedIn ? "Notifications" : "Host an Event"}
-            </Link>
+            {
+              isUserLoggedIn ? <Link to={""}>Notifications</Link> : <Link to={"/organization/signup"}>Host an Event</Link>
+            }
             <Link to={""}>Support</Link>
           </div>
           {/* right */}

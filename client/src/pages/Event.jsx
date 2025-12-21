@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { FaArrowRight } from "react-icons/fa6";
 import { Link, useParams } from "react-router";
+import Timer from "../components/Timer";
 
 function Event() {
   const param = useParams();
@@ -19,16 +20,42 @@ function Event() {
     return response.json();
   };
 
-  const { status, data, error } = useQuery({
+  const getUpcomingEvents = async () => {
+    const res = await fetch(
+      `http://localhost:8080/api/events/upcoming?city=${eventData.data.city}&exclude=${eventData.data.id}`
+    );
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.message || `HTTP error! status: ${res.status}`);
+    }
+    return res.json();
+  };
+
+  const {
+    status: eventStatus,
+    data: eventData,
+    error: eventErr,
+  } = useQuery({
     queryKey: ["event", param.event_id],
     queryFn: getEventDetails,
   });
 
-  console.log(data);
+  const {
+    status: upcomingStatus,
+    data: upcomingData,
+    error: upcomingErr,
+  } = useQuery({
+    queryKey: ["upcomingEvent", eventData?.data.city],
+    enabled: !!eventData?.data.city,
+    queryFn: getUpcomingEvents,
+  });
+
+  console.log(eventData); // remove
+  console.log(upcomingData); // remove
 
   return (
     <div className="">
-      {status == "pending" && (
+      {eventStatus == "pending" && (
         <div>
           <div className="text-center py-8">
             <p className="text-gray-500">Loading events...</p>
@@ -36,109 +63,191 @@ function Event() {
         </div>
       )}
 
-      {status == "error" && (
+      {eventStatus == "error" && (
         <div className="p-5">
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
             <p className="font-medium">Error loading events</p>
             <p className="text-sm mt-1">
-              {error?.message || "Something went wrong. Please try again."}
+              {eventErr?.message || "Something went wrong. Please try again."}
             </p>
           </div>
         </div>
       )}
 
-      {status === "success" && (
-        <div className="w-full">
-          {/* HERO SECTION */}
-          <div className="relative h-[60vh] w-full bg-black/60 flex items-center justify-center">
-            <div>
-              <img
-                src="https://images.unsplash.com/photo-1505373877841-8d25f7d46678?q=80&w=1112&auto=format&fit=crop"
-                alt="Event banner"
-                className="absolute inset-0 w-full h-full object-cover"
-              />
+      {eventStatus === "success" && (
+        // about event
+        <div className="w-full h-[200vh] px-2 md:px-6 py-5">
+          <div className="w-full flex flex-col md:flex-row gap-10">
+            {/* IMG SECTION */}
+            <div className="md:w-1/3 xl:w-1/4">
+              <div className="relative h-[60vh] w-full bg-black/60 flex items-center justify-center">
+                <div>
+                  <img
+                    src="https://images.unsplash.com/photo-1505373877841-8d25f7d46678?q=80&w=1112&auto=format&fit=crop"
+                    alt="Event banner"
+                    className="absolute inset-0 w-full h-full object-cover"
+                  />
+                </div>
+                <div className="relative z-10 text-center px-6">
+                  <h1 className="text-4xl md:text-5xl font-bold text-white uppercase">
+                    {eventData.data.name}
+                  </h1>
+                  <p className="text-gray-300 mt-3 text-lg">
+                    Organized by:{" "}
+                    <Link
+                      to={`/about/organisations/${eventData.data.org_id}`}
+                      className="font-semibold"
+                    >
+                      {eventData.data.organized_by}
+                    </Link>
+                  </p>
+                </div>
+              </div>
+              <div className="h-12 w-full text-white mt-1 flex items-center lg:gap-1">
+                <div className="h-full w-1/2 flex items-center justify-center  bg-black">
+                  <Timer data={eventData.data.date} />
+                </div>
+                <div className="bg-indigo-600 text-white h-full w-1/2 flex items-center justify-center">
+                  <Link
+                    to={""}
+                    className="flex items-center justify-center gap-2"
+                  >
+                    <div>Book Your Seat</div>
+                    <div className="">
+                      <FaArrowRight />
+                    </div>
+                  </Link>
+                </div>
+              </div>
             </div>
-            <div className="relative z-10 text-center px-6">
-              <h1 className="text-4xl md:text-5xl font-bold text-white uppercase">
-                {data.data.name}
-              </h1>
-              <p className="text-gray-300 mt-3 text-lg">
-                Organized by:{" "}
-                <Link
-                  to={`/about/organisations/${data.data.org_id}`}
-                  className="font-semibold"
-                >
-                  {data.data.organized_by}
-                </Link>
-              </p>
+            {/* DETAILS SECTION */}
+            <div className="md:w-2/3 px-3 md:px-0">
+              <div className="mb-5">
+                <h1 className="text-4xl font-semibold">
+                  {eventData.data.name}
+                </h1>
+              </div>
+              {/* TODO: description */}
+              <div className="mb-8">
+                <h3 className="text-xl font-semibold text-zinc-800 mb-2">
+                  Description
+                </h3>
+                <p className="text-justify text-zinc-700">
+                  Lorem ipsum dolor, sit amet consectetur adipisicing elit.
+                  Illum laborum omnis provident tempore, sit doloribus natus
+                  commodi. Asperiores dolor accusamus laudantium rem, sunt
+                  corrupti ipsum eos accusantium doloribus delectus natus quae
+                  aut veritatis aspernatur tenetur voluptates, soluta similique
+                  maxime ducimus adipisci voluptatibus iure labore aperiam? Quos
+                  nesciunt esse corporis est, omnis, atque perferendis illo sint
+                  laborum vel minus suscipit. Dignissimos accusantium dolorem ad
+                  itaque maiores! Vel, officiis beatae nam quod id modi quia
+                  vero omnis quos. Inventore accusamus facilis voluptas
+                  asperiores impedit fugit consectetur atque, praesentium
+                  suscipit officiis illo cumque? Nam sit possimus saepe
+                  assumenda ea quae ipsa accusamus dolorem.
+                </p>
+              </div>
+
+              {/* DATE */}
+              <div className="mb-8">
+                <h2 className="text-xl font-semibold text-zinc-800 mb-2">
+                  Event Date
+                </h2>
+                <p className="text-gray-700 text-lg">
+                  {new Date(eventData.data.date).toLocaleString("en-IN", {
+                    dateStyle: "full",
+                    timeStyle: "short",
+                  })}
+                </p>
+              </div>
+
+              {/* LOCATION */}
+              <div className="mb-10">
+                <h2 className="text-xl font-semibold text-zinc-800 mb-2">
+                  Location
+                </h2>
+
+                <div className="bg-zinc-50">
+                  <p className="text-gray-700 leading-relaxed">
+                    {eventData.data.address}
+                    <br />
+                    {eventData.data.city}, {eventData.data.state}
+                    <br />
+                    {eventData.data.country}
+                  </p>
+                </div>
+              </div>
+
+              {/* CAPACITY GRID */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-8">
+                <div className="">
+                  <h3 className="text-sm font-medium text-gray-500">
+                    Seats Available
+                  </h3>
+                  <p className="text-2xl font-semibold mt-1 text-zinc-800">
+                    {eventData.data.seats_available}
+                  </p>
+                </div>
+
+                <div className="bg-zinc-50 ">
+                  <h3 className="text-sm font-medium text-gray-500">
+                    Total Capacity
+                  </h3>
+                  <p className="text-2xl font-semibold mt-1 text-zinc-800">
+                    {eventData.data.capacity}
+                  </p>
+                </div>
+              </div>
+
+              {/* CTA */}
             </div>
           </div>
 
-          {/* DETAILS SECTION */}
-          <div className="max-w-4xl mx-auto px-6 py-10">
-            {/* DATE */}
-            <div className="mb-8">
-              <h2 className="text-xl font-semibold text-zinc-800 mb-2">
-                Event Date
-              </h2>
-              <p className="text-gray-700 text-lg">
-                {new Date(data.data.date).toLocaleString("en-IN", {
-                  dateStyle: "full",
-                  timeStyle: "short",
-                })}
-              </p>
+          {/* upcoming events */}
+          <div className="pt-10">
+            <div className="text-2xl font-semibold capitalize">
+              More event's you may Like
             </div>
-
-            {/* LOCATION */}
-            <div className="mb-10">
-              <h2 className="text-xl font-semibold text-zinc-800 mb-2">
-                Location
-              </h2>
-
-              <div className="bg-zinc-50">
-                <p className="text-gray-700 leading-relaxed">
-                  {data.data.address}
-                  <br />
-                  {data.data.city}, {data.data.state}
-                  <br />
-                  {data.data.country}
-                </p>
-              </div>
-            </div>
-
-            {/* CAPACITY GRID */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-8">
-              <div className="">
-                <h3 className="text-sm font-medium text-gray-500">
-                  Seats Available
-                </h3>
-                <p className="text-2xl font-semibold mt-1 text-zinc-800">
-                  {data.data.seats_available}
-                </p>
-              </div>
-
-              <div className="bg-zinc-50 ">
-                <h3 className="text-sm font-medium text-gray-500">
-                  Total Capacity
-                </h3>
-                <p className="text-2xl font-semibold mt-1 text-zinc-800">
-                  {data.data.capacity}
-                </p>
-              </div>
-            </div>
-
-            {/* CTA */}
-            <div className="mt-10 w-fit">
-              <Link
-                to={`/event/book-seat/${data.data.id}`}
-                className="px-6 py-3 flex items-center gap-2 bg-indigo-600 text-white hover:bg-indigo-700 transition"
-              >
-                <div>Book Your Seat</div>
-                <div className="">
-                  <FaArrowRight />
+            {upcomingStatus == "pending" && (
+              <div>
+                <div className="text-center py-8">
+                  <p className="text-gray-500">Loading events...</p>
                 </div>
-              </Link>
-            </div>
+              </div>
+            )}
+
+            {upcomingStatus == "error" && (
+              <div className="p-5">
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+                  <p className="font-medium">Error loading events</p>
+                  <p className="text-sm mt-1">
+                    {upcomingErr?.message ||
+                      "Something went wrong. Please try again."}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {upcomingStatus == "success" && (
+              <div className="pt-5">
+                {upcomingData?.data == null ? (
+                  <p className="text-gray-400 ">No upcoming events</p>
+                ) : (
+                  <div className="flex items-center gap-2 overflow-hidden overflow-x-scroll pt-5">
+                    {
+                      upcomingData.data.map((event, id)=>{
+                        return(
+                          <div key={id}>
+                            <div className="h-[38vh] w-62 bg-zinc-900 shrink-0"></div>
+                          </div>
+                        )
+                      })
+                    }
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

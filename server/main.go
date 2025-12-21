@@ -628,6 +628,52 @@ func (h *Handler) getEventByCityHandler(c *gin.Context) {
 	})
 }
 
+func (h *Handler) getUpcomingEventCityHandler(c *gin.Context) {
+	city := c.Query("city")
+	exclude := c.Query("exclude")
+	excludeId, err := strconv.Atoi(exclude)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": fmt.Sprintf("wrong event id(%s) type, should be int", exclude),
+		})
+		return
+	}
+
+	query := "SELECT * FROM event WHERE city = ? AND id != ? ORDER BY date ASC LIMIT 6"
+	rows, err := h.db.Query(query, city, excludeId)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	var events []models.Event
+	for rows.Next() {
+		var e models.Event
+		if err := rows.Scan(&e.Id, &e.Name, &e.OrgId, &e.OrganizedBy, &e.Capacity, &e.SeatsAvailable, &e.Date, &e.Address, &e.City, &e.State, &e.Country, &e.CreatedAt); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "row scan error:" + err.Error(),
+			})
+			return
+		}
+		events = append(events, e)
+	}
+
+	if len(events) == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"message": fmt.Sprintf("No upcoming events found for city: %v", city),
+			"data":    []interface{}{},
+		})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"message": fmt.Sprintf("served upcoming events by city excluding (%v)", exclude),
+		"data":    events,
+	})
+
+}
+
 func (h *Handler) getEventByIdHandler(c *gin.Context) {
 	strId := c.Param("id")
 	if strId == "" {
@@ -816,7 +862,8 @@ func main() {
 	router.POST("/api/auth/login", h.loginUser)                // working
 	router.GET("/api/events", h.listEventHandler)              // working
 	router.GET("/about/organization/:id", h.aboutOrganization) // working
-	router.GET("/api/event/:id", h.getEventByIdHandler)        // working 
+	router.GET("/api/event/:id", h.getEventByIdHandler)        // working
+	router.GET("/api/events/upcoming", h.getUpcomingEventCityHandler)
 
 	router.GET("/api/events/:city", h.getEventByCityHandler)
 	router.POST("/api/book-seats/:event_id", h.bookSeatForEvent)

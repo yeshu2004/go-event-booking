@@ -28,7 +28,7 @@ function Events() {
   console.log(data);
 
   return (
-    <div className="px-5 pt-16">
+    <div className="px-5 pt-5">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Upcoming Events</h1>
       </div>
