@@ -32,7 +32,7 @@ createRoot(document.getElementById("root")).render(
           <Route path="/about/event/:event_id" element={<Event />} />
           <Route path="/about/organisations/:orgId" element={<AboutOrg />} />
           {/* protected*/}
-          <Route path="/event/book-seat/:event_id" element={<BookSeat />} />
+          <Route path="/event/book/:event_id" element={<BookSeat />} />
         </Route>
         {/* for organization*/}
         <Route element={<OrgLayout />}>

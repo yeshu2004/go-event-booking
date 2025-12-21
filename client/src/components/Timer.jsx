@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
+import { data } from "react-router";
 
-function Timer({ data }) {
-  const eventTime = new Date(data).getTime();
+function Timer({ date }) {
+  const eventTime = new Date(date).getTime();
 
   const getTimeLeft = () => {
     const now = Date.now();
@@ -24,7 +25,7 @@ function Timer({ data }) {
     }, 60000);
 
     return () => clearInterval(interval);
-  },);
+  },[data.date]);
 
   return (
     <div className="flex items-center justify-center">

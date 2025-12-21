@@ -87,25 +87,6 @@ function Events() {
                   <FaArrowRight />
                 </div>
               </div>
-
-              {/* <div className="mt-3 space-y-1 text-sm text-gray-700">
-                <p>
-                  <span className="font-medium">Date: </span>
-                  <span>
-                    {new Date(event.date).toLocaleDateString("en-IN", {
-                      day: "numeric",
-                      month: "long",
-                      year: "numeric",
-                      // hour: "2-digit",
-                      // minute: "2-digit",
-                    })}
-                  </span>
-                </p>
-                <p>
-                  <span className="font-medium">Location: </span>
-                  {event.city.trim()}, {event.state}, {event.country}
-                </p>
-              </div> */}
               <div className="pt-2">
                 <Link to={`/about/event/${event.id}`} className=" w-full text-center">
                   <button className="w-full bg-orange-600 text-white py-1 font-semibold hover:bg-orange-500 cursor-pointer">Know More!</button>

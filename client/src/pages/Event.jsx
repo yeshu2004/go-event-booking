@@ -45,7 +45,7 @@ function Event() {
     data: upcomingData,
     error: upcomingErr,
   } = useQuery({
-    queryKey: ["upcomingEvent", eventData?.data.city],
+    queryKey: ["upcomingEvent", eventData?.data.id],
     enabled: !!eventData?.data.city,
     queryFn: getUpcomingEvents,
   });
@@ -76,7 +76,7 @@ function Event() {
 
       {eventStatus === "success" && (
         // about event
-        <div className="w-full h-[200vh] px-2 md:px-6 py-5">
+        <div className="w-full h-full px-2 md:px-6 py-5">
           <div className="w-full flex flex-col md:flex-row gap-10">
             {/* IMG SECTION */}
             <div className="md:w-1/3 xl:w-1/4">
@@ -103,13 +103,14 @@ function Event() {
                   </p>
                 </div>
               </div>
-              <div className="h-12 w-full text-white mt-1 flex items-center lg:gap-1">
-                <div className="h-full w-1/2 flex items-center justify-center  bg-black">
-                  <Timer data={eventData.data.date} />
+              <div className="lg:h-12 md:h-24 h-12 w-full text-white mt-1 flex flex-row lg:flex-row md:flex-col items-center md:gap-1 lg:gap-1">
+                <div className="h-full w-1/2 md:w-full lg:w-1/2 flex items-center justify-center  bg-black">
+                  <Timer key={eventData.data.id} date={eventData.data.date} />
                 </div>
-                <div className="bg-indigo-600 text-white h-full w-1/2 flex items-center justify-center">
+                <div className="bg-indigo-600 text-white h-full w-1/2 md:w-full lg:w-1/2 flex items-center justify-center">
+                  {/* CTA */}
                   <Link
-                    to={""}
+                    to={`/event/book/${eventData.data.id}`} state={{event: {id: eventData.data.id, name: eventData.data.name, date: eventData.data.date, city: eventData.data.city, state: eventData.data.state}}}
                     className="flex items-center justify-center gap-2"
                   >
                     <div>Book Your Seat</div>
@@ -199,8 +200,6 @@ function Event() {
                   </p>
                 </div>
               </div>
-
-              {/* CTA */}
             </div>
           </div>
 
@@ -231,19 +230,32 @@ function Event() {
 
             {upcomingStatus == "success" && (
               <div className="pt-5">
-                {upcomingData?.data == null ? (
+                {upcomingData?.data == null || upcomingData.data.length == 0 ? (
                   <p className="text-gray-400 ">No upcoming events</p>
                 ) : (
                   <div className="flex items-center gap-2 overflow-hidden overflow-x-scroll pt-5">
-                    {
-                      upcomingData.data.map((event, id)=>{
-                        return(
-                          <div key={id}>
-                            <div className="h-[38vh] w-62 bg-zinc-900 shrink-0"></div>
+                    {upcomingData.data.map((event, id) => {
+                      return (
+                        <div key={id} className="w-62">
+                          <div className="h-[38vh] full bg-zinc-900 shrink-0"></div>
+                          <div className="w-full h-10 flex items-center ">
+                            <div className="w-1/2 h-full bg-zinc-800 text-white text-center items-center justify-center flex">
+                              {new Date(event.date).toLocaleString("en-IN", {
+                                dateStyle: "medium",
+                              })}
+                            </div>
+                            <div className="w-1/2 bg-indigo-600 flex items-center justify-center h-full text-white">
+                              <Link
+                                to={`/about/event/${event.id}`}
+                                className=""
+                              >
+                                View Deatils
+                              </Link>
+                            </div>
                           </div>
-                        )
-                      })
-                    }
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>

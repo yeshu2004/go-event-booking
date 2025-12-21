@@ -674,6 +674,31 @@ func (h *Handler) getUpcomingEventCityHandler(c *gin.Context) {
 
 }
 
+func (h *Handler) getSeatsAvailabilityByEvent(c *gin.Context) {
+	i := c.Param("id")
+	id, err := strconv.Atoi(i)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	query := "SELECT seats_available FROM event WHERE id = ?";
+	var seats int
+	if err := h.db.QueryRow(query, id).Scan(&seats); err != nil{
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "seats retrived!",
+		"data": seats,
+	})
+}
+
 func (h *Handler) getEventByIdHandler(c *gin.Context) {
 	strId := c.Param("id")
 	if strId == "" {
@@ -863,7 +888,8 @@ func main() {
 	router.GET("/api/events", h.listEventHandler)              // working
 	router.GET("/about/organization/:id", h.aboutOrganization) // working
 	router.GET("/api/event/:id", h.getEventByIdHandler)        // working
-	router.GET("/api/events/upcoming", h.getUpcomingEventCityHandler)
+	router.GET("/api/events/upcoming", h.getUpcomingEventCityHandler) //working
+	router.GET("/api/event/seats/:id", h.getSeatsAvailabilityByEvent) //working
 
 	router.GET("/api/events/:city", h.getEventByCityHandler)
 	router.POST("/api/book-seats/:event_id", h.bookSeatForEvent)

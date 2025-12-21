@@ -7,6 +7,7 @@ function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
+  const userDetail = useUserAuthStore((state)=> state.userDetail)
   const loginUser = useUserAuthStore((state) => state.loginUser);
   const navigate = useNavigate();
 
@@ -40,7 +41,7 @@ function Login() {
         setError(data.error || "Something went wrong. Please try again.");
         return;
       }
-
+      userDetail(data.data);
       loginUser(data.data.token);
       setEmail("");
       setPassword("");
