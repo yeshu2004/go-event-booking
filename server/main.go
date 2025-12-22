@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -222,7 +224,7 @@ func (h *Handler) loginUser(c *gin.Context) {
 
 }
 
-// for user
+// for user -- not in use
 func (h *Handler) subscribeHandler(c *gin.Context) {
 	// get id from middlware
 	currentUser, exists := c.Get("current_user")
@@ -597,7 +599,7 @@ func (h *Handler) listEventHandler(c *gin.Context) {
 	})
 }
 
-// TODO: pagination(limit & offset), wrong city
+// TODO: pagination(limit & offset), wrong city -- not in use
 func (h *Handler) getEventByCityHandler(c *gin.Context) {
 	s := strings.TrimSpace(c.Param("city"))
 	state := strings.ToTitle(s)
@@ -684,9 +686,9 @@ func (h *Handler) getSeatsAvailabilityByEvent(c *gin.Context) {
 		return
 	}
 
-	query := "SELECT seats_available FROM event WHERE id = ?";
+	query := "SELECT seats_available FROM event WHERE id = ?"
 	var seats int
-	if err := h.db.QueryRow(query, id).Scan(&seats); err != nil{
+	if err := h.db.QueryRow(query, id).Scan(&seats); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": err.Error(),
 		})
@@ -695,10 +697,11 @@ func (h *Handler) getSeatsAvailabilityByEvent(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "seats retrived!",
-		"data": seats,
+		"data":    seats,
 	})
 }
 
+// for user -- in use
 func (h *Handler) getEventByIdHandler(c *gin.Context) {
 	strId := c.Param("id")
 	if strId == "" {
@@ -731,6 +734,62 @@ func (h *Handler) getEventByIdHandler(c *gin.Context) {
 		"data":    event,
 	})
 
+}
+
+// -- improved query than others, uses context and hard timeout (not verified)
+func (h *Handler) getAllBookings(c *gin.Context) {
+	i := c.Param("id")
+	id, err := strconv.Atoi(i)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "user ID is required || inviald user ID format!",
+		})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 4*time.Second)
+	defer cancel()
+
+	query := "SELECT booking.id, booking.event_id, booking.booked_at, event.name, event.date, event.city FROM booking INNER JOIN event ON booking.event_id = event.id WHERE booking.user_id = ? "
+	rows, err := h.db.QueryContext(ctx, query, id)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusRequestTimeout, gin.H{
+				"error": "query timeout",
+			})
+			return
+		}
+
+		if errors.Is(err, context.Canceled) {
+			c.JSON(499, gin.H{
+				"error": "request canceled by client",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to fetch bookings",
+		})
+		return
+	}
+	defer rows.Close()
+
+	var Bookings []models.UserBookings
+	for rows.Next() {
+		var b models.UserBookings
+		if err := rows.Scan(&b.Id, &b.EventId, &b.BookedAt, &b.EventName, &b.Date, &b.City, &b.EventId); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+		b.UserId = int64(id);
+		Bookings = append(Bookings, b)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "succesfully retrived",
+		"data": Bookings,
+	})
 }
 
 // route: /api/book-seats/:event_id
@@ -883,13 +942,16 @@ func main() {
 	router.POST("/api/create-event", h.orgMiddleware, h.createEventHandler) // working
 	router.POST("/api/subscribe", h.orgMiddleware, h.subscribeHandler)      // TODO
 
-	router.POST("/api/auth/sign-in", h.createUser)             // working
-	router.POST("/api/auth/login", h.loginUser)                // working
-	router.GET("/api/events", h.listEventHandler)              // working
-	router.GET("/about/organization/:id", h.aboutOrganization) // working
-	router.GET("/api/event/:id", h.getEventByIdHandler)        // working
+	router.POST("/api/auth/sign-in", h.createUser)                    // working
+	router.POST("/api/auth/login", h.loginUser)                       // working
+	router.GET("/api/events", h.listEventHandler)                     // working
+	router.GET("/about/organization/:id", h.aboutOrganization)        // working
+	router.GET("/api/event/:id", h.getEventByIdHandler)               // working
 	router.GET("/api/events/upcoming", h.getUpcomingEventCityHandler) //working
-	router.GET("/api/event/seats/:id", h.getSeatsAvailabilityByEvent) //working
+
+	router.GET("/api/user/:id/bookings", h.middleware, h.getAllBookings)
+
+	router.GET("/api/event/seats/:id", h.getSeatsAvailabilityByEvent) //working (not in use rn)
 
 	router.GET("/api/events/:city", h.getEventByCityHandler)
 	router.POST("/api/book-seats/:event_id", h.bookSeatForEvent)

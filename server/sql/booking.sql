@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS booking (
     seats     INT NOT NULL,
     booked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (event_id) REFERENCES event(id) ON DELETE CASCADE,
-    -- FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE, just for testing user_id is by random fake.
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     INDEX idx_event (event_id),
-    -- INDEX idx_user (user_id)
+    INDEX idx_user (user_id)
 );
