@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useOrgAuthStore } from "../../store/useOrgAuth";
+import { useUserAuthStore } from "../../store/useUserAuth";
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -8,6 +9,14 @@ const Login = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const loginOrg = useOrgAuthStore((state)=>state.loginOrg)
+
+  // when user comes to login as a org, logout him as user!
+  // (could be done better as an when client clicks on login button
+  // as org, logout normal user)
+  const logoutUser = useUserAuthStore((state)=> state.logoutUser)
+  useEffect(()=>{
+    logoutUser();
+  },[])
 
   const navigate = useNavigate();
 

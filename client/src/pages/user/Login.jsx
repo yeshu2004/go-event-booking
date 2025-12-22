@@ -1,24 +1,34 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { useUserAuthStore } from "../../store/useUserAuth";
+import { useOrgAuthStore } from "../../store/useOrgAuth";
 
 function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  const userDetail = useUserAuthStore((state)=> state.userDetail)
+  const logoutOrg = useOrgAuthStore((state) => state.logoutOrg);
+
+  const userDetail = useUserAuthStore((state) => state.userDetail);
   const loginUser = useUserAuthStore((state) => state.loginUser);
   const navigate = useNavigate();
 
   const [searchParams] = useSearchParams();
   const redirectParam = searchParams.get("redirect");
   let redirectTo = "/";
-  if(redirectParam == "/"){
-    redirectTo =  "/events"
-  }else{
-    redirectTo = redirectParam || "/events"
+  if (redirectParam == "/") {
+    redirectTo = "/events";
+  } else {
+    redirectTo = redirectParam || "/events";
   }
+
+  // when org user comes to login as a user, logout him as org!
+  // (could be done better as an when client clicks on login button
+  // as user, logout org user)
+  useEffect(() => {
+    logoutOrg();  
+  }, []);
 
   async function handleSubmit(e) {
     e.preventDefault();

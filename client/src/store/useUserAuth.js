@@ -9,6 +9,6 @@ export const useUserAuthStore = create(
     loginUser: (token) => set({ userToken: token, isUserLoggedIn: true }),
     logoutUser: () => set({ userData: null, userToken: null, isUserLoggedIn: false}),
     userDetail: (data) =>set({userData: data})
-  })),
-  { name: "userToken" }
-);
+  }),
+  { name: "user-auth" }
+));

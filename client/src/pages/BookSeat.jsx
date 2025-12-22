@@ -25,6 +25,7 @@ function BookTicket() {
   const { status, error, data: event } = useQuery({
     queryKey: ["eventData", param.event_id],
     queryFn: getEventDetails,
+    // refetchInterval: 20, // every 20 sec, client will re-query the data (for seats_availability)
   });
 
   const [tickets, setTickets] = useState(1);
@@ -115,12 +116,12 @@ function BookTicket() {
                 <input
                   className="w-full border rounded-lg px-4 py-2"
                   placeholder="Full Name"
-                  value={userData.full_name}
+                  defaultValue={userData.full_name}
                 />
                 <input
                   className="w-full border rounded-lg px-4 py-2"
                   placeholder="Email Address"
-                  value={userData.email}
+                  defaultValue={userData.email}
                 />
                 <input
                   className="w-full border rounded-lg px-4 py-2"

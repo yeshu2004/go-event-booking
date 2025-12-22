@@ -73,6 +73,15 @@ function Dashboard() {
     }
   };
 
+
+  if(!isOrgLoggedIn){
+    return(
+      <div className="p-5">
+        <h1>Please login in to continue...</h1>
+      </div>
+    )
+  }
+
   return (
     <div className="p-5">
       <div className="flex items-center justify-between">
