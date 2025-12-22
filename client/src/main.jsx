@@ -15,6 +15,7 @@ import Event from "./pages/Event.jsx";
 import BookSeat from "./pages/BookSeat.jsx";
 import UserLayout from "./layouts/UserLayout.jsx";
 import OrgLayout from "./layouts/OrgLayout.jsx";
+import Profile from "./pages/user/Profile.jsx";
 
 const queryClient = new QueryClient();
 
@@ -33,6 +34,7 @@ createRoot(document.getElementById("root")).render(
           <Route path="/about/organisations/:orgId" element={<AboutOrg />} />
           {/* protected*/}
           <Route path="/event/book/:event_id" element={<BookSeat />} />
+          <Route path="/user/profile/:id" element={<Profile/>}/>
         </Route>
         {/* for organization*/}
         <Route element={<OrgLayout />}>

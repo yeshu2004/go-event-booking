@@ -6,6 +6,7 @@ import { useOrgAuthStore } from "../../store/useOrgAuth";
 function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  // const [number, setNumber] = useState("");  { TODO }
   const [error, setError] = useState("");
 
   const logoutOrg = useOrgAuthStore((state) => state.logoutOrg);
@@ -27,7 +28,7 @@ function Login() {
   // (could be done better as an when client clicks on login button
   // as user, logout org user)
   useEffect(() => {
-    logoutOrg();  
+    logoutOrg();
   }, []);
 
   async function handleSubmit(e) {

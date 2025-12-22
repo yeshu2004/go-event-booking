@@ -9,7 +9,7 @@ function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   console.log(isOpen);
 
-  const { isUserLoggedIn } = useUserAuthStore();
+  const { isUserLoggedIn, userData } = useUserAuthStore();
   const logoutUser = useUserAuthStore((state) => state.logoutUser);
   const location = useLocation();
   return (
@@ -41,7 +41,7 @@ function Navbar() {
             <div className="hidden md:flex">
               {isUserLoggedIn ? (
                 <div className="flex items-center gap-3">
-                  <Link to={"/"} className="">
+                  <Link to={`/user/profile/${userData.id}`} className="">
                     My Account
                   </Link>
                   <button

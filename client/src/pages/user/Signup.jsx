@@ -7,6 +7,7 @@ function Signup() {
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  // const [number, setNumber] = useState("");  { TODO }
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
