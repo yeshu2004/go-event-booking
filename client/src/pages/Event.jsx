@@ -129,11 +129,11 @@ function Event() {
                 </h1>
               </div>
               {/* TODO: description */}
-              <div className="mb-8">
+              <div className="my-8">
                 <h3 className="text-xl font-semibold text-zinc-800 mb-2">
                   Description
                 </h3>
-                <p className="text-justify text-zinc-700">
+                <p className="text-justify text-zinc-700 bg-zinc-50">
                   Lorem ipsum dolor, sit amet consectetur adipisicing elit.
                   Illum laborum omnis provident tempore, sit doloribus natus
                   commodi. Asperiores dolor accusamus laudantium rem, sunt
@@ -151,11 +151,11 @@ function Event() {
               </div>
 
               {/* DATE */}
-              <div className="mb-8">
+              <div className="mb-8 ">
                 <h2 className="text-xl font-semibold text-zinc-800 mb-2">
                   Event Date
                 </h2>
-                <p className="text-gray-700 text-lg">
+                <p className="text-gray-700 text-lg bg-zinc-50">
                   {new Date(eventData.data.date).toLocaleString("en-IN", {
                     dateStyle: "full",
                     timeStyle: "short",
@@ -186,7 +186,7 @@ function Event() {
                   <h3 className="text-sm font-medium text-gray-500">
                     Seats Available
                   </h3>
-                  <p className="text-2xl font-semibold mt-1 text-zinc-800">
+                  <p className="text-2xl font-semibold mt-1 text-zinc-800 ">
                     {eventData.data.seats_available}
                   </p>
                 </div>

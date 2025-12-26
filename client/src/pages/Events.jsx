@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link, Links } from "react-router";
+import { Link } from "react-router";
 import { FaArrowRight } from "react-icons/fa6";
 
 function Events() {
@@ -24,8 +24,9 @@ function Events() {
     queryFn: getEvents,
   });
 
-  
+
   console.log(data);
+  const events =  data?.data ?? [];
 
   return (
     <div className="px-5 pt-5">
@@ -47,15 +48,15 @@ function Events() {
         </div>
       )}
 
-      {status == "success" && data.data.length == 0 && (
+      {status == "success" && events.length == 0 && (
         <div className="text-center py-8 text-gray-500">
           <p>No events available at the moment.</p>
         </div>
       )}
 
-      {status == "success" && data.data.length > 0 && (
+      {status == "success" && events.length > 0 && (
         <div className="grid gap-6 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 w-full">
-          {data.data.map((event) => (
+          {events.map((event) => (
             <div key={event.id} className="">
               <div className="bg-black h-[30vh] w-full">
 
