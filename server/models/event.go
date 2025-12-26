@@ -16,3 +16,13 @@ type Event struct {
 	Country        string    `json:"country" db:"country"`
 	CreatedAt      time.Time `json:"created_at" db:"created_at"`
 }
+
+type EventCache struct{
+	EventID int `json:"id" db:"id"`
+	EventName string `json:"name" db:"name"`
+	EventDate time.Time `json:"date" db:"date"`
+	City string `json:"city" db:"city"`
+	OrganizationID int `json:"org_id" db:"org_id"`
+	OrganizationName string `json:"organized_by" db:"organized_by"`
+	// ImageKey string  -- TODO: aws s3 bucket key name 
+}
