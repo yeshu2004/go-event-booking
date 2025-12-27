@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -11,7 +12,7 @@ import (
 )
 
 var (
-	cacheAllEventKey string = "events:all" 
+	eventVerisonKey string = "event:v"
 )
 
 type RedisServer struct {
@@ -39,12 +40,45 @@ func GetRedisClient() (*RedisServer, error) {
 	}, nil
 }
 
-func (r *RedisServer) SetEventsCache(ctx context.Context, events []models.EventCache) error{
+func (r *RedisServer) UpdateEventVersion(ctx context.Context) error {
+	v, err := r.GetEventVerison(ctx);
+	if v == -1{
+		return fmt.Errorf("version error:(%d)", v)
+	}
+	if err != nil{
+		return err
+	}
+	key := eventVerisonKey
+	return r.rdx.Set(ctx, key, v+1, 0).Err();
+}
+
+func (r *RedisServer) GetEventVerison(ctx context.Context)(int, error){
+	key := eventVerisonKey
+	s, err := r.rdx.Get(ctx, key).Result()
+	// if version is not present, -> only once
+	if err == redis.Nil{
+		r.rdx.Set(ctx, key, 1, 0)
+		return 1, nil
+	}
+
+	// other err
+	if err != nil{
+		return -1, err
+	}
+
+	n, err := strconv.Atoi(s);
+	if err != nil{
+		return -1, err
+	}
+
+	return n, nil;
+}
+
+func (r *RedisServer) SetEventsCache(ctx context.Context, events []models.EventCache, verison int, cursor int, limit int) error{
 	if r == nil || r.rdx == nil {
 		return fmt.Errorf("redis not available")
 	}
-
-	key := cacheAllEventKey
+	key := getEventCacheKey(verison, cursor, limit)
 	data, err := json.Marshal(events);
 	if err != nil{
 		return err;
@@ -54,12 +88,12 @@ func (r *RedisServer) SetEventsCache(ctx context.Context, events []models.EventC
 	return r.rdx.Set(ctx, key, data, 10*time.Minute).Err()
 }
 
-func (r *RedisServer) GetCacheEvents(ctx context.Context)([]models.EventCache, error){
+func (r *RedisServer) GetCacheEvents(ctx context.Context,version int, cursor int, limit int)([]models.EventCache, error){
 	if r == nil || r.rdx == nil {
 		return nil, fmt.Errorf("redis not available")
 	}
 
-	key := cacheAllEventKey;
+	key := getEventCacheKey(version, cursor, limit);
 	res, err := r.rdx.Get(ctx, key).Result();
 	if err != nil {
 		if err == redis.Nil {
@@ -76,6 +110,11 @@ func (r *RedisServer) GetCacheEvents(ctx context.Context)([]models.EventCache, e
 	return events, nil
 }
 
-func (r *RedisServer)InvalidateEventsCache(ctx context.Context) error {
-	return r.rdx.Del(ctx, cacheAllEventKey).Err()
+// func (r *RedisServer)InvalidateEventsCache(ctx context.Context) error {
+// 	return r.rdx.Del(ctx, cacheAllEventKey).Err()
+// }
+
+
+func getEventCacheKey(version int, cursor int, limit int) string {
+	return fmt.Sprintf("%s:%d:c:%d:l:%d", eventVerisonKey, version, cursor, limit)
 }

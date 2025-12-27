@@ -22,8 +22,13 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+const (
+	defaultCursor int = 0
+	defaultLimit int = 0
+)
+
 type Handler struct {
-	db *sql.DB
+	db          *sql.DB
 	redisClient *storage.RedisServer
 }
 
@@ -456,7 +461,7 @@ func (h *Handler) orgMiddleware(c *gin.Context) {
 	c.Next()
 }
 
-// for organization, improved: redis cache invalidation & context timeouts err
+// for organization, improved: redis cache versioning & context timeouts err
 func (h *Handler) createEventHandler(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
@@ -491,12 +496,12 @@ func (h *Handler) createEventHandler(c *gin.Context) {
 	query := "INSERT INTO event (name, org_id, organized_by, capacity, date, address, city, state, country) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
 	res, err := h.db.ExecContext(ctx, query, newEvent.Name, org.Id, org.OrgName, newEvent.Capacity, newEvent.Date, newEvent.Address, newEvent.City, newEvent.State, newEvent.Country)
 	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded){
+		if errors.Is(err, context.DeadlineExceeded) {
 			c.JSON(http.StatusRequestTimeout, gin.H{
-					"error": "query timeout",
-				})
-				return
-			}
+				"error": "query timeout",
+			})
+			return
+		}
 		if errors.Is(err, context.Canceled) {
 			c.JSON(499, gin.H{
 				"error": "request canceled by client",
@@ -515,11 +520,13 @@ func (h *Handler) createEventHandler(c *gin.Context) {
 		return
 	}
 
-	if err := h.redisClient.InvalidateEventsCache(ctx); err != nil{
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": fmt.Sprintf("redis invalidate err:%v", err.Error()),
-		})
-		return
+	// update redis version
+	if h.redisClient != nil{
+		if err := h.redisClient.UpdateEventVersion(ctx); err != nil{
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": err,
+			})
+		}
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
@@ -592,24 +599,50 @@ func (h *Handler) aboutOrganization(c *gin.Context) {
 	})
 }
 
-// for user, improved: redis cache miss/hit & context timeouts err
+// for user, improved: redis cache miss/hit & context t
+// imeouts err with pagination.
+// trying to convert this into upcomingEventsHandler
 func (h *Handler) listEventHandler(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 4*time.Second)
 	defer cancel()
 
-	// cache check ->
-	cachedEvents, err := h.redisClient.GetCacheEvents(ctx)
-	if err == nil && cachedEvents != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"message": "retrieved all events from cache",
-			"data":    cachedEvents,
-		})
+	// retrive cursor(id), limit from client request
+	idStr := c.DefaultQuery("id", fmt.Sprintf("%v",defaultCursor))
+	limitStr := c.DefaultQuery("limit", fmt.Sprintf("%v", defaultLimit))
+	cursor, err := strconv.Atoi(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid cursor"})
 		return
 	}
 
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit < 10 {
+		limit = 10
+	}
+
+	var version int
+	// cache check ->
+	if h.redisClient != nil{
+		// get verison
+		v, err := h.redisClient.GetEventVerison(ctx);
+		if err != nil || v == -1 {
+			fmt.Printf("version error on listing: %s\n", err);
+		}
+		version = v;
+
+		cachedEvents, err := h.redisClient.GetCacheEvents(ctx,v ,cursor, limit)
+		if err == nil && cachedEvents != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"message": "retrieved all events from cache",
+				"data":    cachedEvents,
+			})
+			return
+		}
+	}
+
 	// cache miss ->
-	query := "SELECT * FROM event"
-	rows, err := h.db.QueryContext(ctx, query);
+	query := "SELECT * FROM event WHERE date >= NOW() AND id > ? ORDER BY id ASC LIMIT ?"
+	rows, err := h.db.QueryContext(ctx, query, cursor, limit+1)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			c.JSON(http.StatusRequestTimeout, gin.H{
@@ -631,7 +664,7 @@ func (h *Handler) listEventHandler(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	var events []models.EventCache
+	events := make([]models.EventCache, 0, limit+1)
 	for rows.Next() {
 		var event models.Event
 		if err := rows.Scan(&event.Id, &event.Name, &event.OrgId, &event.OrganizedBy, &event.Capacity, &event.SeatsAvailable, &event.Date, &event.Address, &event.City, &event.State, &event.Country, &event.CreatedAt); err != nil {
@@ -641,23 +674,36 @@ func (h *Handler) listEventHandler(c *gin.Context) {
 			return
 		}
 		events = append(events, models.EventCache{
-			EventID: int(event.Id),
-			EventName: event.Name,
-			OrganizationID: int(event.OrgId),
+			EventID:          int(event.Id),
+			EventName:        event.Name,
+			OrganizationID:   int(event.OrgId),
 			OrganizationName: event.OrganizedBy,
-			EventDate: event.Date,
-			City: event.City,
+			EventDate:        event.Date,
+			City:             event.City,
 		})
 	}
 
-	// cache set in redis
-	if err := h.redisClient.SetEventsCache(ctx, events); err != nil{
+	hasNext := false
+	if len(events) > limit {
+		hasNext = true
+		events = events[:limit]
+	}
+
+	nextCursor := 0
+	if hasNext {
+		nextCursor = events[len(events)-1].EventID
+	}
+
+	// // cache set in redis
+	if err := h.redisClient.SetEventsCache(ctx, events, version, cursor, limit); err != nil {
 		fmt.Printf("failed to set events cache: %v", err)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "events retrieved",
-		"data":    events,
+		"message":     "events retrieved",
+		"data":        events,
+		"has_next":      hasNext,
+		"next_cursor": nextCursor,
 	})
 }
 
@@ -844,19 +890,19 @@ func (h *Handler) getAllBookings(c *gin.Context) {
 			})
 			return
 		}
-		b.UserId = int64(id);
+		b.UserId = int64(id)
 		Bookings = append(Bookings, b)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "succesfully retrived",
-		"data": Bookings,
+		"data":    Bookings,
 	})
 }
 
 // new -- not done, will do.
-func (h *Handler) userDetailHandler(c *gin.Context){
-	 
+func (h *Handler) userDetailHandler(c *gin.Context) {
+
 }
 
 // route: /api/book-seats/:event_id
@@ -959,7 +1005,7 @@ func (h *Handler) bookSeatForEvent(c *gin.Context) {
 	})
 
 }
- 
+
 func welcomeHandler(c *gin.Context) {
 	time.Sleep(time.Second * 5)
 	c.JSON(http.StatusOK, gin.H{
@@ -974,11 +1020,12 @@ func main() {
 		log.Fatalf("failed to connect to database: %v", err)
 	}
 
-	r, err := storage.GetRedisClient();
-	if err != nil{
-		fmt.Println(err);
+	r, err := storage.GetRedisClient()
+	if err != nil {
+		fmt.Println(err)
 	}
-	h := &Handler{db: db, redisClient: r};
+	h := &Handler{db: db, redisClient: r}
+	// h := &Handler{db: db}
 
 
 	// read event.sql file and create table or can be done through workbench,
@@ -1015,8 +1062,8 @@ func main() {
 	router.POST("/api/create-event", h.orgMiddleware, h.createEventHandler) // working
 	router.POST("/api/subscribe", h.orgMiddleware, h.subscribeHandler)      // TODO
 
-	router.POST("/api/auth/sign-in", h.createUser)                    // working
-	router.POST("/api/auth/login", h.loginUser)                       // working
+	router.POST("/api/auth/sign-in", h.createUser) // working
+	router.POST("/api/auth/login", h.loginUser)    // working
 	router.GET("/api/profile/user/:id", h.middleware, h.userDetailHandler)
 	router.GET("/api/events", h.listEventHandler)                     // working
 	router.GET("/about/organization/:id", h.aboutOrganization)        // working
