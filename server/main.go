@@ -499,8 +499,8 @@ func (h *Handler) createEventHandler(c *gin.Context) {
 	newEvent.Country = strings.TrimSpace(newEvent.Country)
 	newEvent.Name = strings.TrimSpace(newEvent.Name)
 
-	query := "INSERT INTO event (name, org_id, organized_by, capacity, date, address, city, state, country) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-	res, err := h.db.ExecContext(ctx, query, newEvent.Name, org.Id, org.OrgName, newEvent.Capacity, newEvent.Date, newEvent.Address, newEvent.City, newEvent.State, newEvent.Country)
+	query := "INSERT INTO event (name, org_id, organized_by, image_key, capacity, date, address, city, state, country) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+	res, err := h.db.ExecContext(ctx, query, newEvent.Name, org.Id, org.OrgName, newEvent.Key, newEvent.Capacity, newEvent.Date, newEvent.Address, newEvent.City, newEvent.State, newEvent.Country)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			c.JSON(http.StatusRequestTimeout, gin.H{
@@ -542,6 +542,7 @@ func (h *Handler) createEventHandler(c *gin.Context) {
 			"name":            newEvent.Name,
 			"orgId":           org.Id,
 			"organizedBy":     org.OrgName,
+			"imageKey":        newEvent.Key,
 			"capacity":        newEvent.Capacity,
 			"seats_available": newEvent.Capacity,
 			"date":            newEvent.Date,
@@ -627,7 +628,7 @@ func (h *Handler) listEventHandler(c *gin.Context) {
 	}
 
 	var version int
-	// cache check ->
+	// // cache check ->
 	if h.redisClient != nil {
 		// get verison
 		v, err := h.redisClient.GetEventVerison(ctx)
@@ -647,7 +648,7 @@ func (h *Handler) listEventHandler(c *gin.Context) {
 	}
 
 	// cache miss ->
-	query := "SELECT * FROM event WHERE date >= NOW() AND id > ? ORDER BY id ASC LIMIT ?"
+	query := "SELECT id, name, org_id, organized_by, image_key, capacity, seats_available, date, address, city, state, country, created_at FROM event WHERE date >= NOW() AND id > ? ORDER BY id ASC LIMIT ?"
 	rows, err := h.db.QueryContext(ctx, query, cursor, limit+1)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
@@ -673,7 +674,7 @@ func (h *Handler) listEventHandler(c *gin.Context) {
 	events := make([]models.EventCache, 0, limit+1)
 	for rows.Next() {
 		var event models.Event
-		if err := rows.Scan(&event.Id, &event.Name, &event.OrgId, &event.OrganizedBy, &event.Capacity, &event.SeatsAvailable, &event.Date, &event.Address, &event.City, &event.State, &event.Country, &event.CreatedAt); err != nil {
+		if err := rows.Scan(&event.Id, &event.Name, &event.OrgId, &event.OrganizedBy, &event.Key, &event.Capacity, &event.SeatsAvailable, &event.Date, &event.Address, &event.City, &event.State, &event.Country, &event.CreatedAt); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "failed to scan rows:" + err.Error(),
 			})
@@ -682,6 +683,7 @@ func (h *Handler) listEventHandler(c *gin.Context) {
 		events = append(events, models.EventCache{
 			EventID:          int(event.Id),
 			EventName:        event.Name,
+			EventKey:         event.Key,
 			OrganizationID:   int(event.OrgId),
 			OrganizationName: event.OrganizedBy,
 			EventDate:        event.Date,
@@ -700,7 +702,7 @@ func (h *Handler) listEventHandler(c *gin.Context) {
 		nextCursor = events[len(events)-1].EventID
 	}
 
-	// // cache set in redis
+	// // // cache set in redis
 	if err := h.redisClient.SetEventsCache(ctx, events, version, cursor, limit); err != nil {
 		fmt.Printf("failed to set events cache: %v", err)
 	}
@@ -833,10 +835,10 @@ func (h *Handler) getEventByIdHandler(c *gin.Context) {
 		return
 	}
 
-	query := "SELECT * FROM event WHERE id = ?"
+	query := "SELECT id, name, org_id, organized_by, image_key, capacity, seats_available, date, address, city, state, country, created_at FROM event WHERE id = ?"
 	row := h.db.QueryRow(query, id)
 	var event models.Event
-	if err := row.Scan(&event.Id, &event.Name, &event.OrgId, &event.OrganizedBy, &event.Capacity, &event.SeatsAvailable, &event.Date, &event.Address, &event.City, &event.State, &event.Country, &event.CreatedAt); err != nil {
+	if err := row.Scan(&event.Id, &event.Name, &event.OrgId, &event.OrganizedBy, &event.Key, &event.Capacity, &event.SeatsAvailable, &event.Date, &event.Address, &event.City, &event.State, &event.Country, &event.CreatedAt); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "row scan error:" + err.Error(),
 		})
@@ -921,7 +923,8 @@ func (h *Handler) getPresignedUrl(c *gin.Context) {
 	org := currOrg.(models.Organization)
 
 	var req struct {
-		fileName string
+		FileName string `json:"fileName"`
+		FileType string `json:"fileType"`
 	}
 
 	if err := c.ShouldBindBodyWithJSON(&req); err != nil {
@@ -930,7 +933,7 @@ func (h *Handler) getPresignedUrl(c *gin.Context) {
 	}
 
 	// key -> /events/uploads/1/demo.png
-	key := fmt.Sprintf("events/uploads/%d/%s", org.Id, req.fileName)
+	key := fmt.Sprintf("events/uploads/%d/%s", org.Id, req.FileName)
 
 	url, err := h.s3.GetPresignUploadURL(ctx, awsBucketName, key)
 	if err != nil {
@@ -942,7 +945,30 @@ func (h *Handler) getPresignedUrl(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"uploadUrl": url,
-		"key":       key,
+		"presignKey": key,
+	})
+}
+
+func (h *Handler) getImageUrl(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+
+	key := c.Query("key")
+	if key == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "image key is required",
+		})
+		return
+	}
+	url, err := h.s3.GetPresignDownloadURL(ctx, awsBucketName, key)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": fmt.Sprintf("failed to fetch presigned url:%s", err.Error()),
+		})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"imageUrl": url,
 	})
 }
 
@@ -1118,9 +1144,10 @@ func main() {
 	router.GET("/about/organization/:id", h.aboutOrganization)        // working
 	router.GET("/api/event/:id", h.getEventByIdHandler)               // working
 	router.GET("/api/events/upcoming", h.getUpcomingEventCityHandler) //working
+	router.POST("/api/event/image/upload-url", h.orgMiddleware, h.getPresignedUrl) // verified, working 
+	router.GET("/api/event/image", h.getImageUrl) // 
 
-	router.GET("/api/event/image/upload-url", h.orgMiddleware, h.getPresignedUrl) // not verified
-	router.GET("/api/user/:id/bookings", h.middleware, h.getAllBookings)          // not verified
+	router.GET("/api/user/:id/bookings", h.middleware, h.getAllBookings) // not verified
 
 	router.GET("/api/event/seats/:id", h.getSeatsAvailabilityByEvent) //working (not in use rn)
 

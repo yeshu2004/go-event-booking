@@ -20,10 +20,8 @@ function Dashboard() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!isOrgLoggedIn) {
-      navigate("/organization/login", { replace: true });
-    }
-  }, [isOrgLoggedIn, navigate]);
+    if (!isOrgLoggedIn) navigate("/organization/login", { replace: true });
+  }, [isOrgLoggedIn, navigate, orgToken]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -40,8 +38,66 @@ function Dashboard() {
         city: city,
         state: state,
         country: country,
+        key: "",
       };
 
+      if (!selectedImage) {
+        setError("please select an event image");
+        setLoading(false);
+        return;
+      }
+
+      if(selectedImage.type !== "image/jpeg" && selectedImage.type !== "image/png"){
+        setError("only jpeg and png images format are allowed");
+        setLoading(false);
+        return;
+      }
+      
+      if(selectedImage.size > 5 * 1024 * 1024){
+        setError("image size should be less than 5MB");
+        setLoading(false);
+        return;
+      }
+
+      // first: get pre-signed url and key
+      const presignedRes = await fetch("http://localhost:8080/api/event/image/upload-url", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${orgToken}`,
+        },
+        body: JSON.stringify({
+          fileName: selectedImage.name,
+          fileType: selectedImage.type,
+        }),
+      });
+      
+      if (!presignedRes.ok) {
+        setLoading(false);
+        throw new Error("failed to get upload URL");
+      }
+      
+      const presignRes = await presignedRes.json();
+      console.log(presignRes); // remove
+      const { uploadUrl, presignKey } = presignRes;
+
+      // next: upload image using pre-signed url
+      const uploadRes = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": selectedImage.type,
+        },
+        body: selectedImage,
+      });
+
+      if (!uploadRes.ok) {
+        setLoading(false);
+        throw new Error("image upload url failed, try again");
+      }
+      console.log(uploadRes); // remove
+
+      // finally: store key & data in db
+      eventData.key = presignKey;
       const res = await fetch("http://localhost:8080/api/create-event", {
         method: "POST",
         headers: {
@@ -58,6 +114,7 @@ function Dashboard() {
         setError(data.error || "Something went wrong. Please try again.");
         return;
       }
+      setSelectedImage(null);
       setSuccess("Event created successfully!");
       setEventName("");
       setCapacity("");
@@ -113,22 +170,30 @@ function Dashboard() {
                 <div>
                   <img
                     alt="not found"
-                    width={"250px"}
+                    width={"100px"}
                     src={URL.createObjectURL(selectedImage)}
                   />
-                  <br /> <br />
-                  <button onClick={() => setSelectedImage(null)}>Remove</button>
                 </div>
               )}
               <input
                 type="file"
                 name="myImage"
                 className="border-dotted border px-4 py-2 rounded-lg cursor-pointer"
-                onClick={(e) => {
-                  console.log(e.target.files);
-                  setSelectedImage(e.target.files[0]);
+                onChange={(e) => {
+                  const file = e.target.files[0];
+                  console.log(file);
+                  if (file) setSelectedImage(e.target.files[0]);
                 }}
               />
+              {selectedImage && (
+                <button
+                  type="button"
+                  className="ml-3 text-sm "
+                  onClick={() => setSelectedImage(null)}
+                >
+                  Remove
+                </button>
+              )}
             </div>
 
             <div>

@@ -7,6 +7,19 @@ function Event() {
   const param = useParams();
   console.log(param.event_id);
 
+  const getEventImage = async (key) => {
+    const response = await fetch(
+      `http://localhost:8080/api/event/image?key=${key}`
+    );
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(
+        errorData.message || `HTTP error! status: ${response.status}`
+      );
+    }
+    return response.json();
+  };
+
   const getEventDetails = async () => {
     const response = await fetch(
       `http://localhost:8080/api/event/${param.event_id}`
@@ -38,6 +51,16 @@ function Event() {
   } = useQuery({
     queryKey: ["event", param.event_id],
     queryFn: getEventDetails,
+  });
+
+  const {
+    data: imageData,
+    status: imageStatus,
+    isFetching: imageIsFetching,
+  } = useQuery({
+    queryKey: ["eventImage", eventData?.data.key],
+    enabled: !!eventData?.data.key,
+    queryFn: () => getEventImage(eventData.data.key),
   });
 
   const {
@@ -83,10 +106,15 @@ function Event() {
               <div className="relative h-[60vh] w-full bg-black/60 flex items-center justify-center">
                 <div>
                   <img
-                    src="https://images.unsplash.com/photo-1505373877841-8d25f7d46678?q=80&w=1112&auto=format&fit=crop"
+                    src={
+                      imageStatus === "success"
+                        ? imageData.imageUrl
+                        : ""
+                    }
                     alt="Event banner"
                     className="absolute inset-0 w-full h-full object-cover"
                   />
+                  <div className="bg-black/20 absolute top-0 left-0 h-full w-full"></div>
                 </div>
                 <div className="relative z-10 text-center px-6">
                   <h1 className="text-4xl md:text-5xl font-bold text-white uppercase">
@@ -110,7 +138,16 @@ function Event() {
                 <div className="bg-indigo-600 text-white h-full w-1/2 md:w-full lg:w-1/2 flex items-center justify-center">
                   {/* CTA */}
                   <Link
-                    to={`/event/book/${eventData.data.id}`} state={{event: {id: eventData.data.id, name: eventData.data.name, date: eventData.data.date, city: eventData.data.city, state: eventData.data.state}}}
+                    to={`/event/book/${eventData.data.id}`}
+                    state={{
+                      event: {
+                        id: eventData.data.id,
+                        name: eventData.data.name,
+                        date: eventData.data.date,
+                        city: eventData.data.city,
+                        state: eventData.data.state,
+                      },
+                    }}
                     className="flex items-center justify-center gap-2"
                   >
                     <div>Book Your Seat</div>

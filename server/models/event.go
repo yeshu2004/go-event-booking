@@ -7,6 +7,7 @@ type Event struct {
 	Name           string    `json:"name" db:"name"`
 	OrgId          int64     `json:"org_id" db:"org_id"`
 	OrganizedBy    string    `json:"organized_by" db:"organized_by"`
+	Key            string    `json:"key" db:"image_key"`
 	Capacity       int64     `json:"capacity" db:"capacity"`
 	SeatsAvailable int64     `json:"seats_available" db:"seats_available"`
 	Date           time.Time `json:"date" db:"date"`
@@ -17,12 +18,13 @@ type Event struct {
 	CreatedAt      time.Time `json:"created_at" db:"created_at"`
 }
 
-type EventCache struct{
-	EventID int `json:"id" db:"id"`
-	EventName string `json:"name" db:"name"`
-	EventDate time.Time `json:"date" db:"date"`
-	City string `json:"city" db:"city"`
-	OrganizationID int `json:"org_id" db:"org_id"`
-	OrganizationName string `json:"organized_by" db:"organized_by"`
-	// ImageKey string  -- TODO: aws s3 bucket key name 
+type EventCache struct {
+	EventID          int       `json:"id" db:"id"`
+	EventName        string    `json:"name" db:"name"`
+	EventKey         string    `json:"key" db:"image_key"`
+	EventDate        time.Time `json:"date" db:"date"`
+	City             string    `json:"city" db:"city"`
+	OrganizationID   int       `json:"org_id" db:"org_id"`
+	OrganizationName string    `json:"organized_by" db:"organized_by"`
+	// ImageKey string  -- TODO: aws s3 bucket key name
 }
