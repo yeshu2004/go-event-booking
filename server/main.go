@@ -12,24 +12,30 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/go-sql-driver/mysql"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/joho/godotenv"
+	cloud "github.com/yeshu2004/go-event-booking/aws"
 	"github.com/yeshu2004/go-event-booking/models"
 	"github.com/yeshu2004/go-event-booking/storage"
 	"golang.org/x/crypto/bcrypt"
 )
 
 const (
-	defaultCursor int = 0
-	defaultLimit int = 0
+	defaultCursor int    = 0
+	defaultLimit  int    = 0
+	awsBucketName string = "ticket-one"
+	awsRegion     string = "ap-south-1"
 )
 
 type Handler struct {
 	db          *sql.DB
 	redisClient *storage.RedisServer
+	s3          *cloud.S3Service
 }
 
 type AuthInput struct {
@@ -521,8 +527,8 @@ func (h *Handler) createEventHandler(c *gin.Context) {
 	}
 
 	// update redis version
-	if h.redisClient != nil{
-		if err := h.redisClient.UpdateEventVersion(ctx); err != nil{
+	if h.redisClient != nil {
+		if err := h.redisClient.UpdateEventVersion(ctx); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": err,
 			})
@@ -607,7 +613,7 @@ func (h *Handler) listEventHandler(c *gin.Context) {
 	defer cancel()
 
 	// retrive cursor(id), limit from client request
-	idStr := c.DefaultQuery("id", fmt.Sprintf("%v",defaultCursor))
+	idStr := c.DefaultQuery("id", fmt.Sprintf("%v", defaultCursor))
 	limitStr := c.DefaultQuery("limit", fmt.Sprintf("%v", defaultLimit))
 	cursor, err := strconv.Atoi(idStr)
 	if err != nil {
@@ -622,15 +628,15 @@ func (h *Handler) listEventHandler(c *gin.Context) {
 
 	var version int
 	// cache check ->
-	if h.redisClient != nil{
+	if h.redisClient != nil {
 		// get verison
-		v, err := h.redisClient.GetEventVerison(ctx);
+		v, err := h.redisClient.GetEventVerison(ctx)
 		if err != nil || v == -1 {
-			fmt.Printf("version error on listing: %s\n", err);
+			fmt.Printf("version error on listing: %s\n", err)
 		}
-		version = v;
+		version = v
 
-		cachedEvents, err := h.redisClient.GetCacheEvents(ctx,v ,cursor, limit)
+		cachedEvents, err := h.redisClient.GetCacheEvents(ctx, v, cursor, limit)
 		if err == nil && cachedEvents != nil {
 			c.JSON(http.StatusOK, gin.H{
 				"message": "retrieved all events from cache",
@@ -702,7 +708,7 @@ func (h *Handler) listEventHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message":     "events retrieved",
 		"data":        events,
-		"has_next":      hasNext,
+		"has_next":    hasNext,
 		"next_cursor": nextCursor,
 	})
 }
@@ -900,6 +906,46 @@ func (h *Handler) getAllBookings(c *gin.Context) {
 	})
 }
 
+func (h *Handler) getPresignedUrl(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+
+	// get org info thrugh org-middleware
+	currOrg, exists := c.Get("current_org")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "user not found in context",
+		})
+		return
+	}
+	org := currOrg.(models.Organization)
+
+	var req struct {
+		fileName string
+	}
+
+	if err := c.ShouldBindBodyWithJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+
+	// key -> /events/uploads/1/demo.png
+	key := fmt.Sprintf("events/uploads/%d/%s", org.Id, req.fileName)
+
+	url, err := h.s3.GetPresignUploadURL(ctx, awsBucketName, key)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": fmt.Sprintf("failed to generate presigned url:%s", err.Error()),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"uploadUrl": url,
+		"key":       key,
+	})
+}
+
 // new -- not done, will do.
 func (h *Handler) userDetailHandler(c *gin.Context) {
 
@@ -1024,9 +1070,12 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 	}
-	h := &Handler{db: db, redisClient: r}
-	// h := &Handler{db: db}
 
+	cfg := loadAwsConifg()
+	s3Service := cloud.NewS3Service(cfg)
+
+	h := &Handler{db: db, redisClient: r, s3: s3Service}
+	// h := &Handler{db: db}
 
 	// read event.sql file and create table or can be done through workbench,
 	// but multiple sql commands in one file will fail.
@@ -1070,7 +1119,8 @@ func main() {
 	router.GET("/api/event/:id", h.getEventByIdHandler)               // working
 	router.GET("/api/events/upcoming", h.getUpcomingEventCityHandler) //working
 
-	router.GET("/api/user/:id/bookings", h.middleware, h.getAllBookings)
+	router.GET("/api/event/image/upload-url", h.orgMiddleware, h.getPresignedUrl) // not verified
+	router.GET("/api/user/:id/bookings", h.middleware, h.getAllBookings)          // not verified
 
 	router.GET("/api/event/seats/:id", h.getSeatsAvailabilityByEvent) //working (not in use rn)
 
@@ -1078,6 +1128,14 @@ func main() {
 	router.POST("/api/book-seats/:event_id", h.bookSeatForEvent)
 
 	router.Run()
+}
+
+func loadAwsConifg() aws.Config {
+	cfg, err := config.LoadDefaultConfig(context.Background(), config.WithRegion(awsRegion))
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	return cfg
 }
 
 // helper function to connect to db.

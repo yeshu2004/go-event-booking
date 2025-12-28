@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { useOrgAuthStore } from "../../store/useOrgAuth";
 
 function Dashboard() {
+  const [selectedImage, setSelectedImage] = useState(null);
   const [eventName, setEventName] = useState("");
   const [capacity, setCapacity] = useState("");
   const [date, setDate] = useState("");
@@ -73,13 +74,12 @@ function Dashboard() {
     }
   };
 
-
-  if(!isOrgLoggedIn){
-    return(
+  if (!isOrgLoggedIn) {
+    return (
       <div className="p-5">
         <h1>Please login in to continue...</h1>
       </div>
-    )
+    );
   }
 
   return (
@@ -105,6 +105,32 @@ function Dashboard() {
             </div>
           )}
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                Event Image
+              </label>
+              {selectedImage && (
+                <div>
+                  <img
+                    alt="not found"
+                    width={"250px"}
+                    src={URL.createObjectURL(selectedImage)}
+                  />
+                  <br /> <br />
+                  <button onClick={() => setSelectedImage(null)}>Remove</button>
+                </div>
+              )}
+              <input
+                type="file"
+                name="myImage"
+                className="border-dotted border px-4 py-2 rounded-lg cursor-pointer"
+                onClick={(e) => {
+                  console.log(e.target.files);
+                  setSelectedImage(e.target.files[0]);
+                }}
+              />
+            </div>
+
             <div>
               <label className="block text-sm font-medium mb-1">
                 Event Name
