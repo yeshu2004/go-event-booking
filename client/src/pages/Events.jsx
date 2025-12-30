@@ -5,13 +5,14 @@ import { useState } from "react";
 
 function Events() {
   const [cursor, setCursor] = useState(0);
-  const [limit, setLimit] = useState(10)
+  const [limit, setLimit] = useState(10);
 
   const getEvents = async (id) => {
-    const response = await fetch(`http://localhost:8080/api/events?id=${id}&limit=${limit}`, {
-      headers: {
-        "Content-Type": "application/json",
-      },
+    const response = await fetch(
+      `http://localhost:8080/api/events?id=${id}&limit=${limit}`,{
+        headers: {
+          "Content-Type": "application/json",
+        },
     });
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -25,24 +26,25 @@ function Events() {
   const { status, data, error, isFetching } = useQuery({
     queryKey: ["events", cursor, limit],
     queryFn: () => getEvents(cursor),
-    placeholderData: keepPreviousData
+    placeholderData: keepPreviousData,
   });
 
   const events = data?.data ?? [];
-  const hasNext = data?.has_next ?? false
+  const hasNext = data?.has_next ?? false;
   const nextCursor = data?.next_cursor ?? 0;
   console.log(data); // remove
-  
+
   return (
     <div className="px-5 pt-5">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Upcoming Events</h1>
       </div>
-      {status == "pending" || isFetching && (
-        <div className="text-center py-8">
-          <p className="text-gray-500">Loading events...</p>
-        </div>
-      )}
+      {status == "pending" ||
+        (isFetching && (
+          <div className="text-center py-8">
+            <p className="text-gray-500">Loading events...</p>
+          </div>
+        ))}
 
       {status === "error" && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
@@ -64,7 +66,9 @@ function Events() {
           <div className="grid gap-6 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 w-full">
             {events.map((event) => (
               <div key={event.id} className="">
-                <div className="bg-black h-[30vh] w-full"></div>
+                <div className="bg-black h-[35vh] w-full overflow-hidden">
+                  <img src={event.image_url} className="bg-center object-cover" />
+                </div>
                 <p className="text-xs text-gray-600 mt-1">
                   By{" "}
                   <Link
@@ -109,11 +113,20 @@ function Events() {
           </div>
           <div className="py-10">
             <div className="absolute flex items-center justify-center bottom-0 gap-3">
-              <button disabled={cursor == 0} className={`${cursor != 0 ? "cursor-pointer": "text-zinc-400"}`}>Prev</button>
               <button
-              className={`${hasNext? "cursor-pointer": "text-zinc-400"}`}
+                disabled={cursor == 0}
+                className={`${
+                  cursor != 0 ? "cursor-pointer" : "text-zinc-400"
+                }`}
+              >
+                Prev
+              </button>
+              <button
+                className={`${hasNext ? "cursor-pointer" : "text-zinc-400"}`}
                 disabled={!hasNext}
-                onClick={() => {setCursor(nextCursor)}}
+                onClick={() => {
+                  setCursor(nextCursor);
+                }}
               >
                 Next
               </button>

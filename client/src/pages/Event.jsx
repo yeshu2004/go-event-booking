@@ -114,7 +114,7 @@ function Event() {
                     alt="Event banner"
                     className="absolute inset-0 w-full h-full object-cover"
                   />
-                  <div className="bg-black/20 absolute top-0 left-0 h-full w-full"></div>
+                  {/* <div className="bg-black/10 absolute top-0 left-0 h-full w-full"></div> */}
                 </div>
                 <div className="relative z-10 text-center px-6">
                   <h1 className="text-4xl md:text-5xl font-bold text-white uppercase">

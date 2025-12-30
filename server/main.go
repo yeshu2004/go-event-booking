@@ -606,6 +606,30 @@ func (h *Handler) aboutOrganization(c *gin.Context) {
 	})
 }
 
+func newEventResponse(eid int, ename string, edate time.Time, eimage string, oid int, oname string, ecity string) *models.EventResponse {
+	return &models.EventResponse{
+		EventID:          eid,
+		EventName:        ename,
+		EventDate:        edate,
+		ImageURL:         eimage,
+		OrganizationID:   oid,
+		OrganizationName: oname,
+		City:             ecity,
+	}
+}
+
+func newEventCache(eid int, ename string, ekey string, edate time.Time, oid int, oname string, ecity string) *models.EventCache {
+	return &models.EventCache{
+		EventID:          eid,
+		EventName:        ename,
+		EventKey:         ekey,
+		EventDate:        edate,
+		OrganizationID:   oid,
+		OrganizationName: oname,
+		City:             ecity,
+	}
+}
+
 // for user, improved: redis cache miss/hit & context t
 // imeouts err with pagination.
 // trying to convert this into upcomingEventsHandler
@@ -628,6 +652,7 @@ func (h *Handler) listEventHandler(c *gin.Context) {
 	}
 
 	var version int
+
 	// // cache check ->
 	if h.redisClient != nil {
 		// get verison
@@ -637,11 +662,16 @@ func (h *Handler) listEventHandler(c *gin.Context) {
 		}
 		version = v
 
+		var cacheRes []models.EventResponse
 		cachedEvents, err := h.redisClient.GetCacheEvents(ctx, v, cursor, limit)
 		if err == nil && cachedEvents != nil {
+			for _, e := range cachedEvents {
+				imageUrl := h.generateImageUrl(e.EventKey)
+				cacheRes = append(cacheRes, *newEventResponse(e.EventID, e.EventName, e.EventDate, imageUrl, e.OrganizationID, e.OrganizationName, e.City))
+			}
 			c.JSON(http.StatusOK, gin.H{
 				"message": "retrieved all events from cache",
-				"data":    cachedEvents,
+				"data":    cacheRes,
 			})
 			return
 		}
@@ -671,45 +701,73 @@ func (h *Handler) listEventHandler(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	events := make([]models.EventCache, 0, limit+1)
+	cacheEvents := make([]models.EventCache, 0, limit+1)
+	respEvents := make([]models.EventResponse, 0, limit+1)
 	for rows.Next() {
 		var event models.Event
-		if err := rows.Scan(&event.Id, &event.Name, &event.OrgId, &event.OrganizedBy, &event.Key, &event.Capacity, &event.SeatsAvailable, &event.Date, &event.Address, &event.City, &event.State, &event.Country, &event.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&event.Id,
+			&event.Name,
+			&event.OrgId,
+			&event.OrganizedBy,
+			&event.Key,
+			&event.Capacity,
+			&event.SeatsAvailable,
+			&event.Date,
+			&event.Address,
+			&event.City,
+			&event.State,
+			&event.Country,
+			&event.CreatedAt,
+		); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "failed to scan rows:" + err.Error(),
+				"error": "failed to scan rows: " + err.Error(),
 			})
 			return
 		}
-		events = append(events, models.EventCache{
-			EventID:          int(event.Id),
-			EventName:        event.Name,
-			EventKey:         event.Key,
-			OrganizationID:   int(event.OrgId),
-			OrganizationName: event.OrganizedBy,
-			EventDate:        event.Date,
-			City:             event.City,
-		})
+
+		// response (with image URL)
+		respEvents = append(respEvents, *newEventResponse(
+			int(event.Id),
+			event.Name,
+			event.Date,
+			h.generateImageUrl(event.Key),
+			int(event.OrgId),
+			event.OrganizedBy,
+			event.City,
+		))
+
+		// cache (without image URL)
+		cacheEvents = append(cacheEvents, *newEventCache(
+			int(event.Id),
+			event.Name,
+			event.Key,
+			event.Date,
+			int(event.OrgId),
+			event.OrganizedBy,
+			event.City,
+		))
 	}
 
 	hasNext := false
-	if len(events) > limit {
+	if len(respEvents) > limit {
 		hasNext = true
-		events = events[:limit]
+		respEvents = respEvents[:limit]
 	}
 
 	nextCursor := 0
 	if hasNext {
-		nextCursor = events[len(events)-1].EventID
+		nextCursor = respEvents[len(respEvents)-1].EventID
 	}
 
-	// // // cache set in redis
-	if err := h.redisClient.SetEventsCache(ctx, events, version, cursor, limit); err != nil {
+	// cache set in redis
+	if err := h.redisClient.SetEventsCache(ctx, cacheEvents, version, cursor, limit); err != nil {
 		fmt.Printf("failed to set events cache: %v", err)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":     "events retrieved",
-		"data":        events,
+		"data":        respEvents,
 		"has_next":    hasNext,
 		"next_cursor": nextCursor,
 	})
@@ -944,7 +1002,7 @@ func (h *Handler) getPresignedUrl(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"uploadUrl": url,
+		"uploadUrl":  url,
 		"presignKey": key,
 	})
 }
@@ -1140,12 +1198,12 @@ func main() {
 	router.POST("/api/auth/sign-in", h.createUser) // working
 	router.POST("/api/auth/login", h.loginUser)    // working
 	router.GET("/api/profile/user/:id", h.middleware, h.userDetailHandler)
-	router.GET("/api/events", h.listEventHandler)                     // working
-	router.GET("/about/organization/:id", h.aboutOrganization)        // working
-	router.GET("/api/event/:id", h.getEventByIdHandler)               // working
-	router.GET("/api/events/upcoming", h.getUpcomingEventCityHandler) //working
-	router.POST("/api/event/image/upload-url", h.orgMiddleware, h.getPresignedUrl) // verified, working 
-	router.GET("/api/event/image", h.getImageUrl) // 
+	router.GET("/api/events", h.listEventHandler)                                  // working
+	router.GET("/about/organization/:id", h.aboutOrganization)                     // working
+	router.GET("/api/event/:id", h.getEventByIdHandler)                            // working
+	router.GET("/api/events/upcoming", h.getUpcomingEventCityHandler)              //working
+	router.POST("/api/event/image/upload-url", h.orgMiddleware, h.getPresignedUrl) // verified, working
+	router.GET("/api/event/image", h.getImageUrl)                                  //
 
 	router.GET("/api/user/:id/bookings", h.middleware, h.getAllBookings) // not verified
 
@@ -1163,6 +1221,14 @@ func loadAwsConifg() aws.Config {
 		log.Fatal(err.Error())
 	}
 	return cfg
+}
+
+func (h *Handler) generateImageUrl(key string) string {
+	url, err := h.s3.GetPresignDownloadURL(context.TODO(), awsBucketName, key)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return url
 }
 
 // helper function to connect to db.

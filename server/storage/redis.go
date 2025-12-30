@@ -93,7 +93,7 @@ func (r *RedisServer) GetCacheEvents(ctx context.Context,version int, cursor int
 		return nil, fmt.Errorf("redis not available")
 	}
 
-	key := getEventCacheKey(version, cursor, limit);
+	key := getEventCacheKey(version, cursor, limit); //helper function used
 	res, err := r.rdx.Get(ctx, key).Result();
 	if err != nil {
 		if err == redis.Nil {
