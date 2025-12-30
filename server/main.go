@@ -32,6 +32,8 @@ const (
 	awsRegion     string = "ap-south-1"
 )
 
+var cloudFrontURL  string
+
 type Handler struct {
 	db          *sql.DB
 	redisClient *storage.RedisServer
@@ -1144,6 +1146,15 @@ func welcomeHandler(c *gin.Context) {
 }
 
 func main() {
+
+	if err := godotenv.Load(); err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
+	cfDomain := os.Getenv("CLOUDFRONT_DOMAIN");
+	cloudFrontURL = cfDomain
+
+
 	// Connection to Database.
 	db, err := connectDb()
 	if err != nil {
@@ -1224,10 +1235,12 @@ func loadAwsConifg() aws.Config {
 }
 
 func (h *Handler) generateImageUrl(key string) string {
-	url, err := h.s3.GetPresignDownloadURL(context.TODO(), awsBucketName, key)
-	if err != nil {
-		log.Fatal(err)
-	}
+	// using cloudfront domain directly for better performance
+	url := fmt.Sprintf("%s/%s", cloudFrontURL, key)
+	// url, err := h.s3.GetPresignDownloadURL(context.TODO(), awsBucketName, key)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
 	return url
 }
 
