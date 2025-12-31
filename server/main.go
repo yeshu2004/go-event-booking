@@ -32,7 +32,7 @@ const (
 	awsRegion     string = "ap-south-1"
 )
 
-var cloudFrontURL  string
+var cloudFrontURL string
 
 type Handler struct {
 	db          *sql.DB
@@ -668,6 +668,7 @@ func (h *Handler) listEventHandler(c *gin.Context) {
 		cachedEvents, err := h.redisClient.GetCacheEvents(ctx, v, cursor, limit)
 		if err == nil && cachedEvents != nil {
 			for _, e := range cachedEvents {
+				// convert cache model to response model & generate image url
 				imageUrl := h.generateImageUrl(e.EventKey)
 				cacheRes = append(cacheRes, *newEventResponse(e.EventID, e.EventName, e.EventDate, imageUrl, e.OrganizationID, e.OrganizationName, e.City))
 			}
@@ -826,19 +827,20 @@ func (h *Handler) getUpcomingEventCityHandler(c *gin.Context) {
 		return
 	}
 
-	var events []models.Event
+	var eventRes []models.EventResponse
 	for rows.Next() {
 		var e models.Event
-		if err := rows.Scan(&e.Id, &e.Name, &e.OrgId, &e.OrganizedBy, &e.Capacity, &e.SeatsAvailable, &e.Date, &e.Address, &e.City, &e.State, &e.Country, &e.CreatedAt); err != nil {
+		if err := rows.Scan(&e.Id, &e.Name, &e.OrgId, &e.OrganizedBy, &e.Capacity, &e.SeatsAvailable, &e.Date, &e.Address, &e.City, &e.State, &e.Country, &e.CreatedAt, &e.Key); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "row scan error:" + err.Error(),
 			})
 			return
 		}
-		events = append(events, e)
+		imageUrl := h.generateImageUrl(e.Key)
+		eventRes = append(eventRes, *newEventResponse(int(e.Id), e.Name, e.Date, imageUrl, int(e.OrgId), e.OrganizedBy, e.City))
 	}
 
-	if len(events) == 0 {
+	if len(eventRes) == 0 {
 		c.JSON(http.StatusOK, gin.H{
 			"message": fmt.Sprintf("No upcoming events found for city: %v", city),
 			"data":    []interface{}{},
@@ -847,7 +849,7 @@ func (h *Handler) getUpcomingEventCityHandler(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"message": fmt.Sprintf("served upcoming events by city excluding (%v)", exclude),
-		"data":    events,
+		"data":    eventRes,
 	})
 
 }
@@ -1009,10 +1011,9 @@ func (h *Handler) getPresignedUrl(c *gin.Context) {
 	})
 }
 
-func (h *Handler) getImageUrl(c *gin.Context) {
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
-	defer cancel()
-
+// get image url from cloudfront when given image key
+// for user -- in use (per event image url generation)
+func (h *Handler) getImageUrlPerEvent(c *gin.Context) {
 	key := c.Query("key")
 	if key == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -1020,13 +1021,8 @@ func (h *Handler) getImageUrl(c *gin.Context) {
 		})
 		return
 	}
-	url, err := h.s3.GetPresignDownloadURL(ctx, awsBucketName, key)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": fmt.Sprintf("failed to fetch presigned url:%s", err.Error()),
-		})
-		return
-	}
+
+	url := h.generateImageUrl(key)
 	c.JSON(http.StatusOK, gin.H{
 		"imageUrl": url,
 	})
@@ -1151,9 +1147,8 @@ func main() {
 		log.Fatal("Error loading .env file")
 	}
 
-	cfDomain := os.Getenv("CLOUDFRONT_DOMAIN");
+	cfDomain := os.Getenv("CLOUDFRONT_DOMAIN")
 	cloudFrontURL = cfDomain
-
 
 	// Connection to Database.
 	db, err := connectDb()
@@ -1214,7 +1209,7 @@ func main() {
 	router.GET("/api/event/:id", h.getEventByIdHandler)                            // working
 	router.GET("/api/events/upcoming", h.getUpcomingEventCityHandler)              //working
 	router.POST("/api/event/image/upload-url", h.orgMiddleware, h.getPresignedUrl) // verified, working
-	router.GET("/api/event/image", h.getImageUrl)                                  //
+	router.GET("/api/event/image", h.getImageUrlPerEvent)                          //
 
 	router.GET("/api/user/:id/bookings", h.middleware, h.getAllBookings) // not verified
 

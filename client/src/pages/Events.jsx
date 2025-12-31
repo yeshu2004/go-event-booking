@@ -67,7 +67,7 @@ function Events() {
             {events.map((event) => (
               <div key={event.id} className="">
                 <div className="bg-black h-[35vh] w-full overflow-hidden">
-                  <img src={event.image_url} className="bg-center object-cover" />
+                  <img src={event.image_url} className="bg-center object-cover h-full w-full" />
                 </div>
                 <p className="text-xs text-gray-600 mt-1">
                   By{" "}

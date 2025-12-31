@@ -273,8 +273,12 @@ function Event() {
                   <div className="flex items-center gap-2 overflow-hidden overflow-x-scroll pt-5">
                     {upcomingData.data.map((event, id) => {
                       return (
-                        <div key={id} className="w-62">
-                          <div className="h-[38vh] full bg-zinc-900 shrink-0"></div>
+                        <div key={id} className="h-full w-62">
+                          <div className="h-[35vh] relative full bg-zinc-900 shrink-0 overflow-hidden">
+                            <div className="absolute w-full top-0 py-1 text-xl bg-zinc-800/60 text-white text-center z-50">{event.name}</div>
+                            <img src={event.image_url} className="h-full w-full object-cover" />
+                            <div className="absolute h-full w-full bg-black/20 top-0 left-0"></div>
+                          </div>
                           <div className="w-full h-10 flex items-center ">
                             <div className="w-1/2 h-full bg-zinc-800 text-white text-center items-center justify-center flex">
                               {new Date(event.date).toLocaleString("en-IN", {
