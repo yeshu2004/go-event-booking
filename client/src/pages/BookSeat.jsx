@@ -1,14 +1,17 @@
 import { useState } from "react";
+import { useNavigate } from "react-router";
 import { Link, useParams } from "react-router";
 import { useUserAuthStore } from "../store/useUserAuth";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 function BookTicket() {
-  const { isUserLoggedIn } = useUserAuthStore();
+  const queryClient = useQueryClient();
+  const { userData, userToken, isUserLoggedIn } = useUserAuthStore();
+  const navigate = useNavigate();
+
   let param = useParams();
 
-  const {userData} = useUserAuthStore();
-// console.log(userData)
+  // console.log(userData)
   const getEventDetails = async () => {
     const response = await fetch(
       `http://localhost:8080/api/event/${param.event_id}`
@@ -22,10 +25,55 @@ function BookTicket() {
     return response.json();
   };
 
-  const { status, error, data: event } = useQuery({
+  // Booking logic here
+  const bookEvent = async () => {
+    const response = await fetch(
+      `http://localhost:8080/api/book-seats/${param.event_id}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${userToken}`,
+        },
+        body: JSON.stringify({
+          seats: tickets,
+        }),
+      }
+    );
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Booking failed");
+    }
+    console.log(data);
+    return data;
+  };
+
+  const bookingMutation = useMutation({
+    mutationFn: bookEvent,
+    onSuccess: () => {
+      queryClient.invalidateQueries(["eventData", param.event_id]);
+       navigate("/user/booking/congratulations", {
+      // state: {
+      //   booking: data.data,
+      //   event: event.data,
+      //   user: userData,
+      // },
+    });
+    },
+    onError: (err) => {
+      alert(err.message);
+    },
+  });
+
+  const {
+    status,
+    error,
+    data: event,
+  } = useQuery({
     queryKey: ["eventData", param.event_id],
     queryFn: getEventDetails,
-    // refetchInterval: 20, // every 20 sec, client will re-query the data (for seats_availability)
+    // refetchInterval: 30, // every 20 sec, client will re-query the data (for seats_availability)
   });
 
   const [tickets, setTickets] = useState(1);
@@ -44,9 +92,8 @@ function BookTicket() {
 
   return (
     <div className="min-h-screen bg-zinc-100 px-4 md:px-6 py-8">
-      {
-        status == "error" &&(
-          <div className="p-5">
+      {status == "error" && (
+        <div className="p-5">
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
             <p className="font-medium">Error loading events</p>
             <p className="text-sm mt-1">
@@ -54,8 +101,7 @@ function BookTicket() {
             </p>
           </div>
         </div>
-        )
-      }
+      )}
 
       {status == "pending" && (
         <div>
@@ -65,13 +111,13 @@ function BookTicket() {
         </div>
       )}
 
-      { status == "success" && event.data.seats_available == 0 &&(
+      {status == "success" && event.data.seats_available == 0 && (
         <div className="text-center text-xl text-zinc-400 py-10">
           Oops, All seats are booked.
         </div>
       )}
 
-      {status == "success" && event.data.seats_available !== 0 &&(
+      {status == "success" && event.data.seats_available !== 0 && (
         <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* LEFT SECTION */}
           <div className="lg:col-span-2 space-y-5">
@@ -85,9 +131,17 @@ function BookTicket() {
                 • {event.data.city}, {event.data.state}
               </p>
               <p className="text-sm text-gray-400 mt-1">
-                Seats Available:{" "} {
-                event.data.seats_available > 10 ? <span className="text-white">{event.data.seats_available}</span>: <span className="text-white">Only {event.data.seats_available} seats left, availability may change</span>
-                }
+                Seats Available:{" "}
+                {event.data.seats_available > 10 ? (
+                  <span className="text-white">
+                    {event.data.seats_available}
+                  </span>
+                ) : (
+                  <span className="text-white">
+                    Only {event.data.seats_available} seats left, availability
+                    may change
+                  </span>
+                )}
               </p>
             </div>
 
@@ -110,18 +164,20 @@ function BookTicket() {
 
             {/* ATTENDEE DETAILS */}
             <div className="bg-white p-6 rounded-xl">
-              <h2 className="text-lg font-semibold mb-4">Attendee Details</h2>
+              <h2 className="text-lg font-semibold mb-4">Buyer Details</h2>
 
               <div className="space-y-4">
                 <input
-                  className="w-full border rounded-lg px-4 py-2"
+                  className="w-full border rounded-lg px-4 py-2 cursor-not-allowed"
                   placeholder="Full Name"
                   defaultValue={userData.full_name}
+                  readOnly
                 />
                 <input
-                  className="w-full border rounded-lg px-4 py-2"
+                  className="w-full border rounded-lg px-4 py-2 cursor-not-allowed"
                   placeholder="Email Address"
                   defaultValue={userData.email}
+                  readOnly
                 />
                 <input
                   className="w-full border rounded-lg px-4 py-2"
@@ -189,7 +245,8 @@ function BookTicket() {
             </div>
 
             <button
-              disabled={!paymentMethod}
+              disabled={!paymentMethod || bookingMutation.isLoading}
+              onClick={()=>bookingMutation.mutate()}
               className={`w-full mt-6 py-3 rounded-lg text-lg font-semibold transition
                 ${
                   paymentMethod
@@ -198,7 +255,7 @@ function BookTicket() {
                 }
               `}
             >
-              Pay ₹{total} & Book Ticket
+              {bookingMutation.isLoading ? "Booking..." : `Pay ₹${total} & Book Ticket`}
             </button>
 
             <p className="text-xs text-gray-500 text-center mt-3">
@@ -214,7 +271,6 @@ function BookTicket() {
           </div>
         </div>
       )}
-
     </div>
   );
 }
