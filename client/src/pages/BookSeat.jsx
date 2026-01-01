@@ -36,6 +36,8 @@ function BookTicket() {
           Authorization: `Bearer ${userToken}`,
         },
         body: JSON.stringify({
+          event_name: event.data.name,
+          date_time: event.data.date,
           seats: tickets,
         }),
       }
@@ -75,6 +77,8 @@ function BookTicket() {
     queryFn: getEventDetails,
     // refetchInterval: 30, // every 20 sec, client will re-query the data (for seats_availability)
   });
+
+  console.log(event)
 
   const [tickets, setTickets] = useState(1);
   const [paymentMethod, setPaymentMethod] = useState("");
