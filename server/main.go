@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -19,9 +20,9 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/joho/godotenv"
-	"github.com/jung-kurt/gofpdf"
 	cloud "github.com/yeshu2004/go-event-booking/aws"
 	"github.com/yeshu2004/go-event-booking/models"
+	"github.com/yeshu2004/go-event-booking/service/nats"
 	"github.com/yeshu2004/go-event-booking/storage"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -39,6 +40,7 @@ type Handler struct {
 	db          *sql.DB
 	redisClient *storage.RedisServer
 	s3          *cloud.S3Service
+	natsIns     *nats.NATSIns
 }
 
 type AuthInput struct {
@@ -609,30 +611,6 @@ func (h *Handler) aboutOrganization(c *gin.Context) {
 	})
 }
 
-func newEventResponse(eid int, ename string, edate time.Time, eimage string, oid int, oname string, ecity string) *models.EventResponse {
-	return &models.EventResponse{
-		EventID:          eid,
-		EventName:        ename,
-		EventDate:        edate,
-		ImageURL:         eimage,
-		OrganizationID:   oid,
-		OrganizationName: oname,
-		City:             ecity,
-	}
-}
-
-func newEventCache(eid int, ename string, ekey string, edate time.Time, oid int, oname string, ecity string) *models.EventCache {
-	return &models.EventCache{
-		EventID:          eid,
-		EventName:        ename,
-		EventKey:         ekey,
-		EventDate:        edate,
-		OrganizationID:   oid,
-		OrganizationName: oname,
-		City:             ecity,
-	}
-}
-
 // for user, improved: redis cache miss/hit & context t
 // imeouts err with pagination.
 // trying to convert this into upcomingEventsHandler
@@ -1139,17 +1117,21 @@ func (h *Handler) seatBookingHandler(c *gin.Context) {
 		return
 	}
 
-	// pdf & notification logic can be added here (email/sms)
-	eventTime, err := time.Parse(time.RFC3339, b.DateTime)
-	pdfcontent := models.PDFContent{UserName: u.FirstName, UserEmail: u.Email, EventName: b.EventName, EventDateTime: eventTime, SeatsBooked: int(b.Seats)};
+	pdfCont := newPdfContent(u.FirstName, u.Email, b.EventName, b.DateTime, int(b.Seats))
 
-	if err := h.generatePDF(&pdfcontent); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": err.Error(),
-		})
-		return
+	// pdf & notification logic can be added here (email/sms)
+	p, _ := json.Marshal(pdfCont)
+	if err = h.natsIns.PublishBookingEvent(ctx, int(bookingID), p); err != nil {
+		log.Printf("failed to publish booking event: %v", err)
 	}
-	
+
+	// go func(data *models.PDFContent) {
+	// 	if err := h.generatePDF(data); err != nil {
+	// 		log.Printf("failed to generate PDF: %v", err)
+	// 		return
+	// 	}
+	// }(pdfCont)
+
 	c.JSON(http.StatusOK, gin.H{
 		"message": "seat booked successfully",
 		"data": gin.H{
@@ -1170,11 +1152,9 @@ func welcomeHandler(c *gin.Context) {
 }
 
 func main() {
-
 	if err := godotenv.Load(); err != nil {
 		log.Fatal("Error loading .env file")
 	}
-
 	cfDomain := os.Getenv("CLOUDFRONT_DOMAIN")
 	cloudFrontURL = cfDomain
 
@@ -1184,15 +1164,25 @@ func main() {
 		log.Fatalf("failed to connect to database: %v", err)
 	}
 
+	// redis
 	r, err := storage.GetRedisClient()
 	if err != nil {
 		fmt.Println(err)
 	}
 
+	// aws
 	cfg := loadAwsConifg()
 	s3Service := cloud.NewS3Service(cfg)
 
-	h := &Handler{db: db, redisClient: r, s3: s3Service}
+	// nats
+	ctx := context.Background()
+	natsIns, err := nats.NewNATSIns()
+	if err != nil {
+		log.Fatal(err)
+	}
+	natsIns.CreateBookingStream(ctx)
+
+	h := &Handler{db: db, redisClient: r, s3: s3Service, natsIns: natsIns}
 	// h := &Handler{db: db}
 
 	// read event.sql file and create table or can be done through workbench,
@@ -1267,46 +1257,42 @@ func (h *Handler) generateImageUrl(key string) string {
 	return url
 }
 
-func (h *Handler) generatePDF(bookingData *models.PDFContent) error {
-
-	formattedTime := "N/A"
-	if !bookingData.EventDateTime.IsZero() {
-		formattedTime = bookingData.EventDateTime.Format("02 Jan 2006, 03:04 PM")
+func newPdfContent(userName, userEmail, eventName, eventDateTime string, seatsBooked int) *models.PDFContent {
+	eventTime, err := time.Parse(time.RFC3339, eventDateTime) // string to time.Time
+	if err != nil {
+		log.Printf("Error parsing event date time: %v", err)
 	}
+	return &models.PDFContent{
+		UserName:      userName,
+		UserEmail:     userEmail,
+		EventName:     eventName,
+		EventDateTime: eventTime,
+		SeatsBooked:   seatsBooked,
+	}
+}
 
-	pdf := gofpdf.New("p", "mm", "A4", "")
-	pdf.AddPage()
-	pdf.SetFont("Helvetica", "", 16)
+func newEventResponse(eid int, ename string, edate time.Time, eimage string, oid int, oname string, ecity string) *models.EventResponse {
+	return &models.EventResponse{
+		EventID:          eid,
+		EventName:        ename,
+		EventDate:        edate,
+		ImageURL:         eimage,
+		OrganizationID:   oid,
+		OrganizationName: oname,
+		City:             ecity,
+	}
+}
 
-
-	letter := fmt.Sprintf(`
-	
-	Hello %s,
-
-	Thank you for booking your ticket with us!
-	We're happy to confirm that your booking has been successfully completed.
-
-	Booking Details:
-	- Event Name: %s
-	- Date & Time: %s
-	- Seats Booked: %d
-
-	Please keep this email as your booking confirmation. 
-	You can also access and download your receipt anytime from the My Bookings section in your profile
-	If you have any questions or need further assistance, feel free to contact our support team.
-	
-	We look forward to seeing you at the event!
-	Best regards,
-	Ticket One Team`, bookingData.UserName, bookingData.EventName, formattedTime, bookingData.SeatsBooked)
-
-	pdf.MultiCell(0, 10, letter, "", "L", false)
-
-	// buf := bytes.Buffer{}
-	// if err := pdf.Output(&buf); err != nil{
-	// 	return fmt.Errorf("failed to generate pdf: %w", err)
-	// }
-
-	return pdf.OutputFileAndClose("booking_confirmation.pdf")
+func newEventCache(eid int, ename string, ekey string, edate time.Time, oid int, oname string, ecity string) *models.EventCache {
+	return &models.EventCache{
+		EventID:          eid,
+		EventName:        ename,
+		EventKey:         ekey,
+		EventDate:        edate,
+		OrganizationID:   oid,
+		OrganizationName: oname,
+		City:             ecity,
+	}
 }
 
 // helper function to connect to db.
