@@ -58,8 +58,7 @@ function Congratulations() {
 
         {/* Extra info */}
         <p className="text-xs text-gray-500 mb-6">
-          Didn’t receive the email? Please check your spam folder or contact
-          support.
+          Didn’t receive the email? Please check your spam folder and <br /> you can find your booking details under profile section.
         </p>
 
         {/* Actions */}
