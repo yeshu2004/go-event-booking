@@ -5,7 +5,8 @@
 - React Router
 - TanStack Query
 - Gin (GoLang)
-- Redis (Docker)
-- NATS (Docker)
+- Redis (Memory DB)
+- NATS (Message Queue)
 - S3 & CloudFront (AWS)
-- MySql
+- MySql (Disk DB)
+- GoPDF (pdf generation)
