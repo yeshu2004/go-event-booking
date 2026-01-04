@@ -13,6 +13,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	cloud "github.com/yeshu2004/go-event-booking/aws"
 	"github.com/yeshu2004/go-event-booking/models"
+	"github.com/yeshu2004/go-event-booking/service/mail"
 	pdf "github.com/yeshu2004/go-event-booking/service/pdf"
 )
 
@@ -145,6 +146,7 @@ func processBookingMessage(ctx context.Context, msg []byte, awsClient *cloud.S3S
 		return err
 	}
 
+	// read the generated pdf
 	file, err := os.ReadFile(fileName)
 	if err != nil {
 		return err
@@ -158,10 +160,24 @@ func processBookingMessage(ctx context.Context, msg []byte, awsClient *cloud.S3S
 	}
 	log.Printf("PDF uploaded to S3 for booking ID %d", data.BookingID)
 
-	// clean up local file
-	if err := os.Remove(fileName); err != nil {
+	// async cleanup -- non blocking
+	go func() {
+		if err := os.Remove(fileName); err != nil {
+			log.Println("cleanup failed:", err)
+		}
+	}()
+
+	// get url of the pdf file 
+	link, err := awsClient.GetPresignDownloadURL(ctx, bucketName, keyName, 60*24*2) // 2 days
+	if err != nil {
 		return err
 	}
-
+	log.Printf("presigned URL generated for booking ID %d", data.BookingID)
+	
+	// send mail to user with the link
+	if err := mail.SendMail(data, link); err != nil {
+		return err
+	}
+	log.Printf("confirmation email sent to %s for booking ID %d", data.UserEmail, data.BookingID)
 	return nil
 }

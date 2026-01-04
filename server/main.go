@@ -29,7 +29,6 @@ const (
 	defaultCursor int    = 0
 	defaultLimit  int    = 0
 	awsBucketName string = "ticket-one"
-	awsRegion     string = "ap-south-1"
 )
 
 var cloudFrontURL string
@@ -1218,15 +1217,17 @@ func main() {
 	router.POST("/api/subscribe", h.orgMiddleware, h.subscribeHandler)      // TODO
 
 	router.POST("/api/auth/sign-in", h.createUser) // working
-	router.POST("/api/auth/login", h.loginUser)    // working
+	router.POST("/api/auth/login", h.loginUser)    // working 
 	router.GET("/api/profile/user/:id", h.middleware, h.userDetailHandler)
-	router.GET("/api/events", h.listEventHandler)                                  // working
-	router.GET("/about/organization/:id", h.aboutOrganization)                     // working
-	router.GET("/api/event/:id", h.getEventByIdHandler)                            // working
+	router.GET("/api/events", h.listEventHandler)                                  // working & tested
+	router.GET("/about/organization/:id", h.aboutOrganization)                     // working & tested
+	router.GET("/api/event/:id", h.getEventByIdHandler)                            // working & tested
 	router.GET("/api/events/upcoming", h.getUpcomingEventCityHandler)              // working & tested
 	router.POST("/api/event/image/upload-url", h.orgMiddleware, h.getPresignedUrl) // working & tested
 	router.GET("/api/event/image", h.getImageUrlPerEvent)                          // working & tested
-	router.POST("/api/book-seats/:event_id", h.middleware, h.seatBookingHandler)   // testing...
+	router.POST("/api/book-seats/:event_id", h.middleware, h.seatBookingHandler)   // working & tested
+
+
 
 	router.GET("/api/user/:id/bookings", h.middleware, h.getAllBookings) // not verified
 
@@ -1240,12 +1241,12 @@ func main() {
 
 func (h *Handler) generateImageUrl(key string) string {
 	// using cloudfront domain directly for better performance
-	url := fmt.Sprintf("%s/%s", cloudFrontURL, key)
+	// url := fmt.Sprintf("%s/%s", cloudFrontURL, key)
 
-	// url, err := h.s3.GetPresignDownloadURL(context.TODO(), awsBucketName, key)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
+	url, err := h.s3.GetPresignDownloadURL(context.TODO(), awsBucketName, key, 10)
+	if err != nil {
+		log.Fatal(err)
+	}
 	return url
 }
 

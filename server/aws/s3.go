@@ -30,13 +30,13 @@ func NewS3Service(cfg aws.Config) *S3Service {
 }
 
 // GetPresignDownloadURL return download image pres-signed url to client
-func (s *S3Service) GetPresignDownloadURL(ctx context.Context, bucketName, keyName string) (string, error) {
+func (s *S3Service) GetPresignDownloadURL(ctx context.Context, bucketName, keyName string, expireMin int) (string, error) {
 	presignClient := s3.NewPresignClient(s.client)
 
 	presigURL, err := presignClient.PresignGetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucketName),
 		Key:    aws.String(keyName),
-	}, s3.WithPresignExpires(10*time.Minute))
+	}, s3.WithPresignExpires( time.Duration(expireMin) *time.Minute))
 
 	if err != nil {
 		return "", err
@@ -70,3 +70,4 @@ func (s *S3Service) UploadObject(ctx context.Context, bucketName, keyName string
 	})
 	return err
 }
+
