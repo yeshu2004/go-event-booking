@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	cloud "github.com/yeshu2004/go-event-booking/aws"
 	"github.com/yeshu2004/go-event-booking/models"
 	pdf "github.com/yeshu2004/go-event-booking/service/pdf"
 )
@@ -41,9 +44,9 @@ func (n *NATSIns) CreateBookingStream(ctx context.Context) error {
 		Storage:     jetstream.FileStorage, // on disk storage
 		Retention:   jetstream.WorkQueuePolicy,
 		Discard:     jetstream.DiscardOld, // remove old message when old
-		MaxAge:      24 * time.Hour,
-		MaxMsgs:     -1, // unlimit
-		MaxBytes:    -1,
+		// MaxAge:      24 * time.Hour,
+		MaxMsgs:  -1, // unlimit
+		MaxBytes: -1,
 	})
 
 	if err != nil && err != jetstream.ErrStreamNameAlreadyInUse {
@@ -68,9 +71,9 @@ func (n *NATSIns) CreateBookingConsumer(ctx context.Context) error {
 		Durable: "booking-worker",
 
 		AckPolicy: jetstream.AckExplicitPolicy,
-		AckWait:   30 * time.Second,
+		AckWait:   2 * time.Minute,
 
-		DeliverPolicy: jetstream.DeliverAllPolicy,
+		DeliverPolicy: jetstream.DeliverNewPolicy,
 		ReplayPolicy:  jetstream.ReplayInstantPolicy,
 
 		MaxDeliver:    5, // retry 5 times
@@ -93,30 +96,42 @@ func (n *NATSIns) ConsumeBookingEvent(ctx context.Context) error {
 		return fmt.Errorf("get consumer error: %w", err)
 	}
 
+	cfg := cloud.LoadAwsConifg()
+	awsClient := cloud.NewS3Service(cfg)
+
 	for {
-		msgs, err := c.Fetch(1, jetstream.FetchMaxWait(5*time.Second))
-		if err != nil {
-			if err == jetstream.ErrNoMessages {
+		select {
+		case <-ctx.Done():
+			log.Println("shutting down booking event consumer...")
+			return nil
+		default:
+			msgs, err := c.Fetch(1, jetstream.FetchMaxWait(5*time.Second))
+			if err != nil {
+				if err == jetstream.ErrNoMessages {
+					continue
+				}
+				log.Println("fetch error:", err)
 				continue
 			}
-			log.Println("fetch error:", err)
-			continue
-		}
 
-		for msg := range msgs.Messages() {
-			if err := processBookingMessage(msg.Data()); err != nil {
-				log.Printf("error in processing message data: %v", err)
-				_ = msg.NakWithDelay(10 * time.Second)  // negative acknowledges i.e message not consumed
-				continue      // do not block
+			for msg := range msgs.Messages() {
+				if err := processBookingMessage(ctx, msg.Data(), awsClient); err != nil {
+					log.Printf("error in processing message data: %v", err)
+					_ = msg.NakWithDelay(10 * time.Second) // negative acknowledges i.e message not consumed
+					continue                               // do not block
+				}
+
+				// acknowledges i.e message consumed
+				if err := msg.Ack(); err != nil {
+					log.Println("ack failed:", err)
+				}
 			}
-
-			msg.Ack() // acknowledges i.e message consumed
 		}
 	}
 }
 
 // helper function to process the msg data from consumers
-func processBookingMessage(msg []byte) error {
+func processBookingMessage(ctx context.Context, msg []byte, awsClient *cloud.S3Service) error {
 	log.Printf("Processing booking message: %s", string(msg))
 
 	var data models.PDFContent
@@ -124,5 +139,29 @@ func processBookingMessage(msg []byte) error {
 		return err
 	}
 
-	return pdf.GeneratePDF(&data);
+	// genrate pdf
+	fileName, err := pdf.GeneratePDF(&data)
+	if err != nil {
+		return err
+	}
+
+	file, err := os.ReadFile(fileName)
+	if err != nil {
+		return err
+	}
+
+	// upload it over cloud
+	bucketName := "ticket-one"
+	keyName := fmt.Sprintf("receipt/%d/booking_%d.pdf", time.Now().Year(), data.BookingID)
+	if err := awsClient.UploadObject(ctx, bucketName, keyName, file, aws.String("application/pdf")); err != nil {
+		return err
+	}
+	log.Printf("PDF uploaded to S3 for booking ID %d", data.BookingID)
+
+	// clean up local file
+	if err := os.Remove(fileName); err != nil {
+		return err
+	}
+
+	return nil
 }

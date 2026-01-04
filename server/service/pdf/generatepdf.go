@@ -3,12 +3,13 @@ package pdf
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/jung-kurt/gofpdf"
 	"github.com/yeshu2004/go-event-booking/models"
 )
 
-func GeneratePDF(bookingData *models.PDFContent) error {
+func GeneratePDF(bookingData *models.PDFContent) (string, error) {
 	formattedTime := "N/A"
 	if !bookingData.EventDateTime.IsZero() {
 		formattedTime = bookingData.EventDateTime.Format("02 Jan 2006, 03:04 PM")
@@ -39,13 +40,9 @@ func GeneratePDF(bookingData *models.PDFContent) error {
 	Ticket One Team`, bookingData.UserName, bookingData.EventName, formattedTime, bookingData.SeatsBooked)
 
 	pdf.MultiCell(0, 10, letter, "", "L", false)
-
-	// buf := bytes.Buffer{}
-	// if err := pdf.Output(&buf); err != nil{
-	// 	return fmt.Errorf("failed to generate pdf: %w", err)
-	// }
-
 	log.Printf("PDF generated for booking %v", bookingData)
 
-	return pdf.OutputFileAndClose("booking_confirmation.pdf")
+	fileName := fmt.Sprintf("%d_event_ticket_%d.pdf", time.Now().UnixNano(), bookingData.BookingID)
+
+	return fileName, pdf.OutputFileAndClose(fileName)
 }

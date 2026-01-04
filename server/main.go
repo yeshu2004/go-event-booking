@@ -12,9 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
+	
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/go-sql-driver/mysql"
@@ -1117,8 +1115,8 @@ func (h *Handler) seatBookingHandler(c *gin.Context) {
 		return
 	}
 
-	pdfCont := newPdfContent(u.FirstName, u.Email, b.EventName, b.DateTime, int(b.Seats))
-
+	pdfCont := newPdfContent(int(bookingID), u.FirstName, u.Email, b.EventName, b.DateTime, int(b.Seats))
+	
 	// pdf & notification logic can be added here (email/sms)
 	p, _ := json.Marshal(pdfCont)
 	if err = h.natsIns.PublishBookingEvent(ctx, int(bookingID), p); err != nil {
@@ -1171,7 +1169,7 @@ func main() {
 	}
 
 	// aws
-	cfg := loadAwsConifg()
+	cfg := cloud.LoadAwsConifg()
 	s3Service := cloud.NewS3Service(cfg)
 
 	// nats
@@ -1239,17 +1237,11 @@ func main() {
 	router.Run()
 }
 
-func loadAwsConifg() aws.Config {
-	cfg, err := config.LoadDefaultConfig(context.Background(), config.WithRegion(awsRegion))
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-	return cfg
-}
 
 func (h *Handler) generateImageUrl(key string) string {
 	// using cloudfront domain directly for better performance
 	url := fmt.Sprintf("%s/%s", cloudFrontURL, key)
+
 	// url, err := h.s3.GetPresignDownloadURL(context.TODO(), awsBucketName, key)
 	// if err != nil {
 	// 	log.Fatal(err)
@@ -1257,12 +1249,13 @@ func (h *Handler) generateImageUrl(key string) string {
 	return url
 }
 
-func newPdfContent(userName, userEmail, eventName, eventDateTime string, seatsBooked int) *models.PDFContent {
+func newPdfContent(bookingID int, userName, userEmail, eventName, eventDateTime string, seatsBooked int) *models.PDFContent {
 	eventTime, err := time.Parse(time.RFC3339, eventDateTime) // string to time.Time
 	if err != nil {
 		log.Printf("Error parsing event date time: %v", err)
 	}
 	return &models.PDFContent{
+		BookingID: bookingID,
 		UserName:      userName,
 		UserEmail:     userEmail,
 		EventName:     eventName,
