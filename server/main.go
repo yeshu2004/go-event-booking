@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	
+
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/go-sql-driver/mysql"
@@ -501,8 +501,8 @@ func (h *Handler) createEventHandler(c *gin.Context) {
 	newEvent.Country = strings.TrimSpace(newEvent.Country)
 	newEvent.Name = strings.TrimSpace(newEvent.Name)
 
-	query := "INSERT INTO event (name, org_id, organized_by, image_key, capacity, date, address, city, state, country) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-	res, err := h.db.ExecContext(ctx, query, newEvent.Name, org.Id, org.OrgName, newEvent.Key, newEvent.Capacity, newEvent.Date, newEvent.Address, newEvent.City, newEvent.State, newEvent.Country)
+	query := "INSERT INTO event (name, org_id, organized_by, image_key, capacity, date, address, city, state, country, visible) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+	res, err := h.db.ExecContext(ctx, query, newEvent.Name, org.Id, org.OrgName, newEvent.Key, newEvent.Capacity, newEvent.Date, newEvent.Address, newEvent.City, newEvent.State, newEvent.Country, newEvent.Visible)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			c.JSON(http.StatusRequestTimeout, gin.H{
@@ -528,12 +528,15 @@ func (h *Handler) createEventHandler(c *gin.Context) {
 		return
 	}
 
-	// update redis version
-	if h.redisClient != nil {
-		if err := h.redisClient.UpdateEventVersion(ctx); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": err,
-			})
+	// if event is set to be active(public), update redis version
+	if newEvent.Visible == "PUBLIC" {
+		if h.redisClient != nil {
+			// update redis version
+			if err := h.redisClient.UpdateEventVersion(ctx); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": err,
+				})
+			}
 		}
 	}
 
@@ -552,6 +555,7 @@ func (h *Handler) createEventHandler(c *gin.Context) {
 			"city":            newEvent.City,
 			"state":           newEvent.State,
 			"county":          newEvent.Country,
+			"visible":         newEvent.Visible,
 		},
 	})
 }
@@ -657,7 +661,7 @@ func (h *Handler) listEventHandler(c *gin.Context) {
 	}
 
 	// cache miss ->
-	query := "SELECT id, name, org_id, organized_by, image_key, capacity, seats_available, date, address, city, state, country, created_at FROM event WHERE date >= NOW() AND id > ? ORDER BY id ASC LIMIT ?"
+	query := "SELECT id, name, org_id, organized_by, image_key, capacity, seats_available, date, address, city, state, country, created_at FROM event WHERE visible = 'PUBLIC' AND date >= NOW() AND id > ? ORDER BY id ASC LIMIT ?"
 	rows, err := h.db.QueryContext(ctx, query, cursor, limit+1)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
@@ -1115,7 +1119,7 @@ func (h *Handler) seatBookingHandler(c *gin.Context) {
 	}
 
 	pdfCont := newPdfContent(int(bookingID), u.FirstName, u.Email, b.EventName, b.DateTime, int(b.Seats))
-	
+
 	// pdf & notification logic can be added here (email/sms)
 	p, _ := json.Marshal(pdfCont)
 	if err = h.natsIns.PublishBookingEvent(ctx, int(bookingID), p); err != nil {
@@ -1217,7 +1221,7 @@ func main() {
 	router.POST("/api/subscribe", h.orgMiddleware, h.subscribeHandler)      // TODO
 
 	router.POST("/api/auth/sign-in", h.createUser) // working
-	router.POST("/api/auth/login", h.loginUser)    // working 
+	router.POST("/api/auth/login", h.loginUser)    // working
 	router.GET("/api/profile/user/:id", h.middleware, h.userDetailHandler)
 	router.GET("/api/events", h.listEventHandler)                                  // working & tested
 	router.GET("/about/organization/:id", h.aboutOrganization)                     // working & tested
@@ -1227,8 +1231,6 @@ func main() {
 	router.GET("/api/event/image", h.getImageUrlPerEvent)                          // working & tested
 	router.POST("/api/book-seats/:event_id", h.middleware, h.seatBookingHandler)   // working & tested
 
-
-
 	router.GET("/api/user/:id/bookings", h.middleware, h.getAllBookings) // not verified
 
 	router.GET("/api/event/seats/:id", h.getSeatsAvailabilityByEvent) //working (not in use rn)
@@ -1237,7 +1239,6 @@ func main() {
 
 	router.Run()
 }
-
 
 func (h *Handler) generateImageUrl(key string) string {
 	// using cloudfront domain directly for better performance
@@ -1256,7 +1257,7 @@ func newPdfContent(bookingID int, userName, userEmail, eventName, eventDateTime 
 		log.Printf("Error parsing event date time: %v", err)
 	}
 	return &models.PDFContent{
-		BookingID: bookingID,
+		BookingID:     bookingID,
 		UserName:      userName,
 		UserEmail:     userEmail,
 		EventName:     eventName,

@@ -11,6 +11,7 @@ function Dashboard() {
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
   const [country, setCountry] = useState("");
+  const [isVisible, SetIsVisible] = useState("PUBLIC");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState("");
@@ -39,6 +40,7 @@ function Dashboard() {
         state: state,
         country: country,
         key: "",
+        visible: isVisible
       };
 
       if (!selectedImage) {
@@ -46,7 +48,6 @@ function Dashboard() {
         setLoading(false);
         return;
       }
-
       if(selectedImage.type !== "image/jpeg" && selectedImage.type !== "image/png"){
         setError("only jpeg and png images format are allowed");
         setLoading(false);
@@ -120,6 +121,7 @@ function Dashboard() {
       setCapacity("");
       setDate("");
       setAddress("");
+
       setCity("");
       setState("");
       setCountry("");
@@ -281,6 +283,20 @@ function Dashboard() {
                   className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Country"
                 />
+              </div>
+
+              <div>
+                <label htmlFor="">Visible</label>
+                <select
+                  name=""
+                  id=""
+                  className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={isVisible}
+                  onChange={(e) => SetIsVisible(e.target.value)}
+                >
+                  <option value="PUBLIC">Public</option>
+                  <option value="PRIVATE">Private</option>
+                </select>
               </div>
             </div>
 

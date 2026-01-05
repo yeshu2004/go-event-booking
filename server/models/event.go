@@ -8,6 +8,7 @@ type Event struct {
 	OrgId          int64     `json:"org_id" db:"org_id"`
 	OrganizedBy    string    `json:"organized_by" db:"organized_by"`
 	Key            string    `json:"key" db:"image_key"`
+	Visible        string    `json:"visible" db:"visible"`
 	Capacity       int64     `json:"capacity" db:"capacity"`
 	SeatsAvailable int64     `json:"seats_available" db:"seats_available"`
 	Date           time.Time `json:"date" db:"date"`

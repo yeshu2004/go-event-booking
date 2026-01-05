@@ -11,6 +11,8 @@ CREATE TABLE event (
     city VARCHAR(200) NOT NULL,
     state VARCHAR(200) NOT NULL,
     country VARCHAR(200) NOT NULL,
+    image_key VARCHAR(200),
+    visible ENUM("PUBLIC", "PRIVATE", "DELETED") DEFAULT "PUBLIC",
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (org_id) REFERENCES organization(id) ON DELETE CASCADE, 
     CONSTRAINT chk_seats CHECK (seats_available <= capacity)
