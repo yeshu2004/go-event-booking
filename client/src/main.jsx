@@ -17,6 +17,10 @@ import UserLayout from "./layouts/UserLayout.jsx";
 import OrgLayout from "./layouts/OrgLayout.jsx";
 import Profile from "./pages/user/Profile.jsx";
 import Congratulations from "./pages/Congratulation.jsx";
+import OrgProtectedLayout from "./layouts/OrgProtectedLayout.jsx";
+import CreateEvent from "./pages/organization/CreateEvent.jsx";
+import MyEvents from "./pages/organization/MyEvents.jsx";
+import EditEvent from "./pages/organization/EditEvent.jsx";
 
 const queryClient = new QueryClient();
 
@@ -38,11 +42,17 @@ createRoot(document.getElementById("root")).render(
           <Route path="/user/profile/:id" element={<Profile/>}/>
           <Route path="/user/booking/congratulations" element={<Congratulations />} />
         </Route>
+
         {/* for organization*/}
         <Route element={<OrgLayout />}>
           <Route path="/organization/signup" element={<Register />} />
           <Route path="/organization/login" element={<OrgLogin />} />
-          <Route path="/dashboard" element={<Dashboard />} />
+          <Route element={<OrgProtectedLayout />}>
+            <Route path="/organization/dashboard" element={<Dashboard />} />
+            <Route path="/organization/create-event" element={<CreateEvent />} />
+            <Route path="/organization/my-events" element={<MyEvents />}/>
+            <Route path="/organization/my-events/edit/:id" element={<EditEvent/>}/>
+          </Route>
         </Route>
       </Routes>
     </QueryClientProvider>

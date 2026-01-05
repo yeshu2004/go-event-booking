@@ -29,7 +29,6 @@ type EventResponse struct {
 	City             string    `json:"city"`
 }
 
-
 type EventCache struct {
 	EventID          int       `json:"id" db:"id"`
 	EventName        string    `json:"name" db:"name"`
@@ -38,5 +37,16 @@ type EventCache struct {
 	City             string    `json:"city" db:"city"`
 	OrganizationID   int       `json:"org_id" db:"org_id"`
 	OrganizationName string    `json:"organized_by" db:"organized_by"`
-	// ImageUrl string 
+	// ImageUrl string
+}
+
+type UpdateEventRequest struct {
+	Name     string    `json:"name"`
+	DateTime time.Time `json:"date_time"`
+	Address  string    `json:"address"`
+	City     string    `json:"city"`
+	State    string    `json:"state"`
+	Country  string    `json:"country"`
+	Capacity int       `json:"capacity"`
+	Visible  string    `json:"visible"`
 }

@@ -49,7 +49,7 @@ const Login = () => {
       setEmail("");
       setPassword("");
       setLoading(false);
-      navigate("/dashboard");
+      navigate("/organization/dashboard");
     } catch (err) {
       setError("Network error. Please check your connection.");
       console.error(err);

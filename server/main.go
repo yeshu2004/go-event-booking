@@ -612,9 +612,51 @@ func (h *Handler) aboutOrganization(c *gin.Context) {
 	})
 }
 
-// for user, improved: redis cache miss/hit & context t
-// imeouts err with pagination.
-// trying to convert this into upcomingEventsHandler
+// handler to mark event delete & update redis cache version
+func (h *Handler) DeletEvenHandler(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+
+	// delete
+	//1. get event id from params
+	i := c.Param("id")
+	id, err := strconv.Atoi(i)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": fmt.Sprintf("wrong event id or conversion error: %v", err),
+		})
+		return
+	}
+
+	//2. mark event
+	query := "UPDATE event SET visible = 'DELETE' WHERE id = ?"
+	_, err = h.db.ExecContext(ctx, query, id)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": fmt.Sprintf("db error: %v", err),
+		})
+		return
+	}
+
+	//3. cache version update
+	if h.redisClient != nil {
+		if err := h.redisClient.UpdateEventVersion(ctx); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": fmt.Sprintf("redis cache version update error: %v", err),
+			})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": fmt.Sprintf("event deleted with event_id (%d)", id),
+	})
+}
+
+// for user, improved: redis cache miss/hit & context
+// timeouts err with pagination.
+// trying to convert this into upcomingEventsHandler,
+// Active events only (date >= now())
 func (h *Handler) listEventHandler(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 4*time.Second)
 	defer cancel()
@@ -660,7 +702,7 @@ func (h *Handler) listEventHandler(c *gin.Context) {
 		}
 	}
 
-	// cache miss ->
+	// cache miss -> list only event who are visible i.e public
 	query := "SELECT id, name, org_id, organized_by, image_key, capacity, seats_available, date, address, city, state, country, created_at FROM event WHERE visible = 'PUBLIC' AND date >= NOW() AND id > ? ORDER BY id ASC LIMIT ?"
 	rows, err := h.db.QueryContext(ctx, query, cursor, limit+1)
 	if err != nil {
@@ -798,7 +840,7 @@ func (h *Handler) getUpcomingEventCityHandler(c *gin.Context) {
 		return
 	}
 
-	query := "SELECT * FROM event WHERE city = ? AND id != ? ORDER BY date ASC LIMIT 6"
+	query := "SELECT * FROM event WHERE city = ? AND visible = 'PUBLIC' AND id != ? ORDER BY date ASC LIMIT 6"
 	rows, err := h.db.Query(query, city, excludeId)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -810,7 +852,7 @@ func (h *Handler) getUpcomingEventCityHandler(c *gin.Context) {
 	var eventRes []models.EventResponse
 	for rows.Next() {
 		var e models.Event
-		if err := rows.Scan(&e.Id, &e.Name, &e.OrgId, &e.OrganizedBy, &e.Capacity, &e.SeatsAvailable, &e.Date, &e.Address, &e.City, &e.State, &e.Country, &e.CreatedAt, &e.Key); err != nil {
+		if err := rows.Scan(&e.Id, &e.Name, &e.OrgId, &e.OrganizedBy, &e.Capacity, &e.SeatsAvailable, &e.Date, &e.Address, &e.City, &e.State, &e.Country, &e.CreatedAt, &e.Key, &e.Visible); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "row scan error:" + err.Error(),
 			})
@@ -859,7 +901,7 @@ func (h *Handler) getSeatsAvailabilityByEvent(c *gin.Context) {
 	})
 }
 
-// for user -- in use
+// for user & org -- in use
 func (h *Handler) getEventByIdHandler(c *gin.Context) {
 	strId := c.Param("id")
 	if strId == "" {
@@ -877,10 +919,10 @@ func (h *Handler) getEventByIdHandler(c *gin.Context) {
 		return
 	}
 
-	query := "SELECT id, name, org_id, organized_by, image_key, capacity, seats_available, date, address, city, state, country, created_at FROM event WHERE id = ?"
+	query := "SELECT id, name, org_id, organized_by, image_key, capacity, seats_available, date, address, city, state, country, created_at, visible FROM event WHERE id = ?"
 	row := h.db.QueryRow(query, id)
 	var event models.Event
-	if err := row.Scan(&event.Id, &event.Name, &event.OrgId, &event.OrganizedBy, &event.Key, &event.Capacity, &event.SeatsAvailable, &event.Date, &event.Address, &event.City, &event.State, &event.Country, &event.CreatedAt); err != nil {
+	if err := row.Scan(&event.Id, &event.Name, &event.OrgId, &event.OrganizedBy, &event.Key, &event.Capacity, &event.SeatsAvailable, &event.Date, &event.Address, &event.City, &event.State, &event.Country, &event.CreatedAt, &event.Visible); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "row scan error:" + err.Error(),
 		})
@@ -1145,6 +1187,223 @@ func (h *Handler) seatBookingHandler(c *gin.Context) {
 
 }
 
+// listEventsByOrganization handler is to list all
+// events listed by a perticular organization
+func (h *Handler) listEventsByOrganization(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+
+	o, exists := c.Get("current_org")
+	if !exists {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to get current org & org doesn't exists",
+		})
+		return
+	}
+	org := o.(models.Organization)
+
+	query := "SELECT * FROM event WHERE org_id = ? AND visible = 'PUBLIC' OR visible = 'PRIVATE'"
+	rows, err := h.db.QueryContext(ctx, query, org.Id)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusRequestTimeout, gin.H{
+				"error": "query timeout",
+			})
+			return
+		}
+
+		if errors.Is(err, context.Canceled) {
+			c.JSON(499, gin.H{
+				"error": "request canceled by client",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to list events",
+		})
+		return
+	}
+
+	var respEvents []models.EventResponse
+	for rows.Next() {
+		var event models.Event
+		if err := rows.Scan(
+			&event.Id,
+			&event.Name,
+			&event.OrgId,
+			&event.OrganizedBy,
+			&event.Capacity,
+			&event.SeatsAvailable,
+			&event.Date,
+			&event.Address,
+			&event.City,
+			&event.State,
+			&event.Country,
+			&event.CreatedAt,
+			&event.Key,
+			&event.Visible,
+		); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "failed to scan rows: " + err.Error(),
+			})
+			return
+		}
+
+		imgaeUrl := h.generateImageUrl(event.Key)
+		respEvents = append(respEvents, *newEventResponse(
+			int(event.Id),
+			event.Name,
+			event.Date,
+			imgaeUrl,
+			int(event.OrgId),
+			event.OrganizedBy,
+			event.City,
+		))
+
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "event retrived",
+		"data":    respEvents,
+	})
+}
+
+// updateEventHandler is to update event details like
+// name, date, capacity etc uploded by organization
+func (h *Handler) updateEventHandler(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+
+	// auth
+	o, exists := c.Get("current_org")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "unauthorized",
+		})
+		return
+	}
+	org := o.(models.Organization)
+
+	// event id
+	eventId, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid event id",
+		})
+		return
+	}
+
+	// input from client
+	var updatedEvent models.UpdateEventRequest
+	if err := c.ShouldBindJSON(&updatedEvent); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid input: " + err.Error(),
+		})
+		return
+	}
+
+	// start trans
+	tx, err := h.db.BeginTx(ctx, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to start transaction",
+		})
+		return
+	}
+
+	// rollback safety
+	defer tx.Rollback()
+
+	// 🔒 lock row
+	var oldCapacity, oldAvailable int
+	err = tx.QueryRowContext(
+		ctx,
+		`SELECT capacity, seats_available
+		 FROM event
+		 WHERE id = ? AND org_id = ?
+		 FOR UPDATE`,
+		eventId,
+		org.Id,
+	).Scan(&oldCapacity, &oldAvailable)
+
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "event not found",
+		})
+		return
+	}
+
+	// calculate booked seats
+	seatsBooked := oldCapacity - oldAvailable
+
+	// validate
+	if updatedEvent.Capacity < seatsBooked {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "capacity cannot be less than already booked seats",
+		})
+		return
+	}
+
+	// recalculate available seats
+	newAvailable := updatedEvent.Capacity - seatsBooked
+
+	// update event
+	_, err = tx.ExecContext(
+		ctx,
+		`UPDATE event
+		 SET name = ?,
+		     capacity = ?,
+		     seats_available = ?,
+		     date = ?,
+		     address = ?,
+		     city = ?,
+		     state = ?,
+		     country = ?,
+		     visible = ?
+		 WHERE id = ? AND org_id = ?`,
+		updatedEvent.Name,
+		updatedEvent.Capacity,
+		newAvailable,
+		updatedEvent.DateTime,
+		updatedEvent.Address,
+		updatedEvent.City,
+		updatedEvent.State,
+		updatedEvent.Country,
+		updatedEvent.Visible,
+		eventId,
+		org.Id,
+	)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to update event: " + err.Error(),
+		})
+		return
+	}
+
+	// commit
+	if err := tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to commit transaction",
+		})
+		return
+	}
+
+	// redis cache verison update
+	if h.redisClient != nil {
+		if err := h.redisClient.UpdateEventVersion(ctx); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "failed to update redis cache version: " + err.Error(),
+			})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "event updated successfully",
+	})
+}
+
 func welcomeHandler(c *gin.Context) {
 	time.Sleep(time.Second * 5)
 	c.JSON(http.StatusOK, gin.H{
@@ -1223,13 +1482,16 @@ func main() {
 	router.POST("/api/auth/sign-in", h.createUser) // working
 	router.POST("/api/auth/login", h.loginUser)    // working
 	router.GET("/api/profile/user/:id", h.middleware, h.userDetailHandler)
-	router.GET("/api/events", h.listEventHandler)                                  // working & tested
-	router.GET("/about/organization/:id", h.aboutOrganization)                     // working & tested
-	router.GET("/api/event/:id", h.getEventByIdHandler)                            // working & tested
-	router.GET("/api/events/upcoming", h.getUpcomingEventCityHandler)              // working & tested
-	router.POST("/api/event/image/upload-url", h.orgMiddleware, h.getPresignedUrl) // working & tested
-	router.GET("/api/event/image", h.getImageUrlPerEvent)                          // working & tested
-	router.POST("/api/book-seats/:event_id", h.middleware, h.seatBookingHandler)   // working & tested
+	router.GET("/api/events", h.listEventHandler)                                          // working & tested
+	router.GET("/about/organization/:id", h.aboutOrganization)                             // working & tested
+	router.GET("/api/event/:id", h.getEventByIdHandler)                                    // working & tested
+	router.GET("/api/events/upcoming", h.getUpcomingEventCityHandler)                      // working & tested
+	router.POST("/api/event/image/upload-url", h.orgMiddleware, h.getPresignedUrl)         // working & tested
+	router.GET("/api/event/image", h.getImageUrlPerEvent)                                  // working & tested
+	router.POST("/api/book-seats/:event_id", h.middleware, h.seatBookingHandler)           // working & tested
+	router.PUT("/api/delete/event/:id", h.DeletEvenHandler)                                // working & tested
+	router.GET("/api/organization/my-events", h.orgMiddleware, h.listEventsByOrganization) // working & tested
+	router.PUT("/api/update/event/:id", h.orgMiddleware, h.updateEventHandler)             // working & tested
 
 	router.GET("/api/user/:id/bookings", h.middleware, h.getAllBookings) // not verified
 
