@@ -13,7 +13,9 @@ function BookedEventCard({ title, date, location, status }) {
       <div>
         <h4 className="font-semibold text-gray-900">{title}</h4>
         <div className="text-sm text-gray-500 space-y-0.5">
-          <p>{date}</p>
+          <p>{new Date(date).toLocaleString("en-IN", {
+                  dateStyle: "medium",
+          })}</p>
           <p>{location}</p>
         </div>
       </div>
