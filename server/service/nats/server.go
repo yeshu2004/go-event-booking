@@ -154,7 +154,7 @@ func processBookingMessage(ctx context.Context, msg []byte, awsClient *cloud.S3S
 
 	// upload it over cloud
 	bucketName := "ticket-one"
-	keyName := fmt.Sprintf("receipt/%d/booking_%d.pdf", time.Now().Year(), data.BookingID)
+	keyName := fmt.Sprintf("receipt/user-%d/booking_%d.pdf", data.UserID, data.BookingID)
 	if err := awsClient.UploadObject(ctx, bucketName, keyName, file, aws.String("application/pdf")); err != nil {
 		return err
 	}

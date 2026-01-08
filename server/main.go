@@ -936,61 +936,61 @@ func (h *Handler) getEventByIdHandler(c *gin.Context) {
 
 }
 
-// -- improved query than others, uses context and hard timeout (not verified)
-func (h *Handler) getAllBookings(c *gin.Context) {
-	i := c.Param("id")
-	id, err := strconv.Atoi(i)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "user ID is required || inviald user ID format!",
-		})
-		return
-	}
+// // -- improved query than others, uses context and hard timeout (not verified)
+// func (h *Handler) getAllBookings(c *gin.Context) {
+// 	i := c.Param("id")
+// 	id, err := strconv.Atoi(i)
+// 	if err != nil {
+// 		c.JSON(http.StatusBadRequest, gin.H{
+// 			"error": "user ID is required || inviald user ID format!",
+// 		})
+// 		return
+// 	}
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 4*time.Second)
-	defer cancel()
+// 	ctx, cancel := context.WithTimeout(c.Request.Context(), 4*time.Second)
+// 	defer cancel()
 
-	query := "SELECT booking.id, booking.event_id, booking.booked_at, event.name, event.date, event.city FROM booking INNER JOIN event ON booking.event_id = event.id WHERE booking.user_id = ? "
-	rows, err := h.db.QueryContext(ctx, query, id)
-	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusRequestTimeout, gin.H{
-				"error": "query timeout",
-			})
-			return
-		}
+// 	query := "SELECT booking.id, booking.event_id, booking.booked_at, event.name, event.date, event.city FROM booking INNER JOIN event ON booking.event_id = event.id WHERE booking.user_id = ? "
+// 	rows, err := h.db.QueryContext(ctx, query, id)
+// 	if err != nil {
+// 		if errors.Is(err, context.DeadlineExceeded) {
+// 			c.JSON(http.StatusRequestTimeout, gin.H{
+// 				"error": "query timeout",
+// 			})
+// 			return
+// 		}
 
-		if errors.Is(err, context.Canceled) {
-			c.JSON(499, gin.H{
-				"error": "request canceled by client",
-			})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to fetch bookings",
-		})
-		return
-	}
-	defer rows.Close()
+// 		if errors.Is(err, context.Canceled) {
+// 			c.JSON(499, gin.H{
+// 				"error": "request canceled by client",
+// 			})
+// 			return
+// 		}
+// 		c.JSON(http.StatusInternalServerError, gin.H{
+// 			"error": "failed to fetch bookings",
+// 		})
+// 		return
+// 	}
+// 	defer rows.Close()
 
-	var Bookings []models.UserBookings
-	for rows.Next() {
-		var b models.UserBookings
-		if err := rows.Scan(&b.Id, &b.EventId, &b.BookedAt, &b.EventName, &b.Date, &b.City, &b.EventId); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": err.Error(),
-			})
-			return
-		}
-		b.UserId = int64(id)
-		Bookings = append(Bookings, b)
-	}
+// 	var Bookings []models.UserBookings
+// 	for rows.Next() {
+// 		var b models.UserBookings
+// 		if err := rows.Scan(&b.Id, &b.EventId, &b.BookedAt, &b.EventName, &b.Date, &b.City, &b.EventId); err != nil {
+// 			c.JSON(http.StatusBadRequest, gin.H{
+// 				"error": err.Error(),
+// 			})
+// 			return
+// 		}
+// 		b.UserId = int64(id)
+// 		Bookings = append(Bookings, b)
+// 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "succesfully retrived",
-		"data":    Bookings,
-	})
-}
+// 	c.JSON(http.StatusOK, gin.H{
+// 		"message": "succesfully retrived",
+// 		"data":    Bookings,
+// 	})
+// }
 
 func (h *Handler) getPresignedUrl(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
@@ -1050,12 +1050,114 @@ func (h *Handler) getImageUrlPerEvent(c *gin.Context) {
 	})
 }
 
-// new -- not done, will do.
-func (h *Handler) userDetailHandler(c *gin.Context) {
+// getUserDetailHandler retrives the user email, name etc
+// gets user details from middleware
+func (h *Handler) getUserDetailHandler(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 4*time.Second)
+	defer cancel()
 
+	user, exists := c.Get("current_user")
+	if !exists {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "user doesn't exists or timeout",
+		})
+		return
+	}
+
+	u := user.(models.User)
+
+	var userDetail models.User
+	query := "SELECT first_name, last_name, email, created_at FROM user WHERE id = ?"
+	if err := h.db.QueryRowContext(ctx, query, u.Id).Scan(&userDetail.FirstName, &userDetail.LastName, &userDetail.Email, &userDetail.CreatedAt); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusRequestTimeout, gin.H{
+				"error": "query timeout",
+			})
+			return
+		}
+
+		if errors.Is(err, context.Canceled) {
+			c.JSON(499, gin.H{
+				"error": "request canceled by client",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to fetch user detail" + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": fmt.Sprintf("user detail retrived for user with id %d", u.Id),
+		"data":    userDetail,
+	})
 }
 
-// route: /api/book-seats/:event_id
+// getUserBooking is used to fetch all bookings for the
+// user with event details, user detail is provided by middleware
+func (h *Handler) getUserBookings(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
+	defer cancel()
+
+	userVal, exists := c.Get("current_user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "user not authenticated",
+		})
+		return
+	}
+	u := userVal.(models.User)
+
+	query := `SELECT  b.id, b.event_id, b.seats, b.status, b.booked_at, e.name, e.date, e.city FROM booking b JOIN event e ON b.event_id = e.id WHERE b.user_id = ? ORDER BY b.booked_at DESC`
+
+	rows, err := h.db.QueryContext(ctx, query, u.Id)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{
+				"error": "request timeout or canceled",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to query bookings",
+		})
+		return
+	}
+	defer rows.Close()
+
+	var bookings []models.UserBookings
+	for rows.Next() {
+		var booking models.UserBookings
+		err := rows.Scan(&booking.Id, &booking.EventId, &booking.Seats, &booking.Status, &booking.BookedAt, &booking.EventName, &booking.Date, &booking.City)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "failed to scan booking row",
+			})
+			return
+		}
+
+		booking.UserId = u.Id
+		bookings = append(bookings, booking)
+	}
+
+	if err = rows.Err(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "error iterating bookings",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "bookings retrieved successfully",
+		"data":    bookings,
+		"count":   len(bookings),
+	})
+}
+
+// seatBookingHandler is to booking seats for client &
+// provides payload to NATS server for pdf genration
+// and email notification
 func (h *Handler) seatBookingHandler(c *gin.Context) {
 	// create context with timeout
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
@@ -1160,20 +1262,13 @@ func (h *Handler) seatBookingHandler(c *gin.Context) {
 		return
 	}
 
-	pdfCont := newPdfContent(int(bookingID), u.FirstName, u.Email, b.EventName, b.DateTime, int(b.Seats))
+	pdfCont := newPdfContent(int(bookingID), int(u.Id), u.FirstName, u.Email, b.EventName, b.DateTime, int(b.Seats))
 
-	// pdf & notification logic can be added here (email/sms)
+	// pdf & notification payload to nats server (email/sms)
 	p, _ := json.Marshal(pdfCont)
 	if err = h.natsIns.PublishBookingEvent(ctx, int(bookingID), p); err != nil {
 		log.Printf("failed to publish booking event: %v", err)
 	}
-
-	// go func(data *models.PDFContent) {
-	// 	if err := h.generatePDF(data); err != nil {
-	// 		log.Printf("failed to generate PDF: %v", err)
-	// 		return
-	// 	}
-	// }(pdfCont)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "seat booked successfully",
@@ -1479,9 +1574,8 @@ func main() {
 	router.POST("/api/create-event", h.orgMiddleware, h.createEventHandler) // working
 	router.POST("/api/subscribe", h.orgMiddleware, h.subscribeHandler)      // TODO
 
-	router.POST("/api/auth/sign-in", h.createUser) // working
-	router.POST("/api/auth/login", h.loginUser)    // working
-	router.GET("/api/profile/user/:id", h.middleware, h.userDetailHandler)
+	router.POST("/api/auth/sign-in", h.createUser)                                         // working
+	router.POST("/api/auth/login", h.loginUser)                                            // working
 	router.GET("/api/events", h.listEventHandler)                                          // working & tested
 	router.GET("/about/organization/:id", h.aboutOrganization)                             // working & tested
 	router.GET("/api/event/:id", h.getEventByIdHandler)                                    // working & tested
@@ -1492,12 +1586,13 @@ func main() {
 	router.PUT("/api/delete/event/:id", h.DeletEvenHandler)                                // working & tested
 	router.GET("/api/organization/my-events", h.orgMiddleware, h.listEventsByOrganization) // working & tested
 	router.PUT("/api/update/event/:id", h.orgMiddleware, h.updateEventHandler)             // working & tested
+	router.GET("/api/profile/user", h.middleware, h.getUserDetailHandler) // working & tested
+	router.GET("/api/user/bookings", h.middleware, h.getUserBookings) // working 
 
-	router.GET("/api/user/:id/bookings", h.middleware, h.getAllBookings) // not verified
-
+	
 	router.GET("/api/event/seats/:id", h.getSeatsAvailabilityByEvent) //working (not in use rn)
-
 	router.GET("/api/events/:city", h.getEventByCityHandler)
+	// router.GET("/api/bookings/events/:id", h.getTotalSeatsBooked)
 
 	router.Run()
 }
@@ -1513,13 +1608,14 @@ func (h *Handler) generateImageUrl(key string) string {
 	return url
 }
 
-func newPdfContent(bookingID int, userName, userEmail, eventName, eventDateTime string, seatsBooked int) *models.PDFContent {
+func newPdfContent(bookingID, userID int, userName, userEmail, eventName, eventDateTime string, seatsBooked int) *models.PDFContent {
 	eventTime, err := time.Parse(time.RFC3339, eventDateTime) // string to time.Time
 	if err != nil {
 		log.Printf("Error parsing event date time: %v", err)
 	}
 	return &models.PDFContent{
 		BookingID:     bookingID,
+		UserID:        userID,
 		UserName:      userName,
 		UserEmail:     userEmail,
 		EventName:     eventName,

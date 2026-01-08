@@ -4,6 +4,7 @@ import "time"
 
 type PDFContent struct {
 	BookingID     int
+	UserID        int
 	UserName      string
 	UserEmail     string
 	EventName     string
