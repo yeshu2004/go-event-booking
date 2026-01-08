@@ -5,9 +5,9 @@ import { useQuery } from "@tanstack/react-query";
 
 function Profile() {
   const { id } = useParams();
-  console.log(id);
-
   const { userToken } = useUserAuthStore();
+
+  console.log(id);
 
   const getUserDetail = async () => {
     const response = await fetch("http://localhost:8080/api/profile/user", {
@@ -165,6 +165,7 @@ function Profile() {
                 {userBookings.map((booking) => (
                   <BookedEventCard
                     key={booking.id}
+                    bookingID={booking.id}
                     title={booking.name}
                     date={booking.date}
                     location={booking.city}

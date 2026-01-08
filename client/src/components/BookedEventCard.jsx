@@ -1,9 +1,38 @@
-function BookedEventCard({ title, date, location, status }) {
-  const isUpcoming = status === "upcoming";
+import { useMutation } from "@tanstack/react-query";
+import { useUserAuthStore } from "../store/useUserAuth";
 
-  const borderAccent = isUpcoming
-    ? "border-t-4 border-indigo-200"
-    : "border-t-4 border-gray-400";
+function BookedEventCard({ bookingID, title, date, location}) {
+  console.log(bookingID)
+
+  const { userToken } = useUserAuthStore();
+
+
+  const getBookingPdfUrl = async (id) => {
+    const response = await fetch(`http://localhost:8080/api/pdf/booking/${id}`,{
+      method: "GET",
+      headers:{
+        Authorization: `Bearer ${userToken}`,
+      }
+    })
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err?.error || "Fetching booking pdf failed");
+    }
+
+    return response.json(); 
+  }
+
+  const bookingPdfMutation = useMutation({
+    mutationFn: getBookingPdfUrl,
+    onSuccess: (data) => {
+      window.open(data.data, "_blank");
+    },
+    onError: (error) => {
+      alert(error.message);
+    },
+  });
+  
+  const borderAccent = "border-t-4 border-indigo-200"
 
   return (
     <div
@@ -22,15 +51,17 @@ function BookedEventCard({ title, date, location, status }) {
 
       {/* Action */}
       <button
-        className={`text-sm font-medium px-4 py-2 rounded-md transition mt-2 w-full
+        type="button"
+        disabled={bookingPdfMutation.isPending}
+        onClick={() => bookingPdfMutation.mutate(bookingID)}
+        className={`text-sm font-medium px-4 py-2 rounded-md transition w-full
           ${
-            isUpcoming
-              ? "bg-indigo-600 text-white cursor-pointer"
-              : "border border-gray-300 text-gray-600 hover:bg-gray-100"
-          }
-        `}
+            bookingPdfMutation.isPending
+              ? "bg-indigo-300 cursor-not-allowed"
+              : "bg-indigo-600 hover:bg-indigo-700 text-white"
+          }`}
       >
-        {isUpcoming ? "View Ticket" : "View Event"}
+        {bookingPdfMutation.isPending ? "Loading ticket..." : "View Ticket"}
       </button>
     </div>
   );
