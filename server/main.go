@@ -936,62 +936,6 @@ func (h *Handler) getEventByIdHandler(c *gin.Context) {
 
 }
 
-// // -- improved query than others, uses context and hard timeout (not verified)
-// func (h *Handler) getAllBookings(c *gin.Context) {
-// 	i := c.Param("id")
-// 	id, err := strconv.Atoi(i)
-// 	if err != nil {
-// 		c.JSON(http.StatusBadRequest, gin.H{
-// 			"error": "user ID is required || inviald user ID format!",
-// 		})
-// 		return
-// 	}
-
-// 	ctx, cancel := context.WithTimeout(c.Request.Context(), 4*time.Second)
-// 	defer cancel()
-
-// 	query := "SELECT booking.id, booking.event_id, booking.booked_at, event.name, event.date, event.city FROM booking INNER JOIN event ON booking.event_id = event.id WHERE booking.user_id = ? "
-// 	rows, err := h.db.QueryContext(ctx, query, id)
-// 	if err != nil {
-// 		if errors.Is(err, context.DeadlineExceeded) {
-// 			c.JSON(http.StatusRequestTimeout, gin.H{
-// 				"error": "query timeout",
-// 			})
-// 			return
-// 		}
-
-// 		if errors.Is(err, context.Canceled) {
-// 			c.JSON(499, gin.H{
-// 				"error": "request canceled by client",
-// 			})
-// 			return
-// 		}
-// 		c.JSON(http.StatusInternalServerError, gin.H{
-// 			"error": "failed to fetch bookings",
-// 		})
-// 		return
-// 	}
-// 	defer rows.Close()
-
-// 	var Bookings []models.UserBookings
-// 	for rows.Next() {
-// 		var b models.UserBookings
-// 		if err := rows.Scan(&b.Id, &b.EventId, &b.BookedAt, &b.EventName, &b.Date, &b.City, &b.EventId); err != nil {
-// 			c.JSON(http.StatusBadRequest, gin.H{
-// 				"error": err.Error(),
-// 			})
-// 			return
-// 		}
-// 		b.UserId = int64(id)
-// 		Bookings = append(Bookings, b)
-// 	}
-
-// 	c.JSON(http.StatusOK, gin.H{
-// 		"message": "succesfully retrived",
-// 		"data":    Bookings,
-// 	})
-// }
-
 func (h *Handler) getPresignedUrl(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
@@ -1087,6 +1031,7 @@ func (h *Handler) getUserDetailHandler(c *gin.Context) {
 		})
 		return
 	}
+	userDetail.Id = u.Id
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": fmt.Sprintf("user detail retrived for user with id %d", u.Id),
@@ -1100,14 +1045,14 @@ func (h *Handler) getUserBookings(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
 	defer cancel()
 
-	userVal, exists := c.Get("current_user")
+	user, exists := c.Get("current_user")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"error": "user not authenticated",
 		})
 		return
 	}
-	u := userVal.(models.User)
+	u := user.(models.User)
 
 	query := `SELECT  b.id, b.event_id, b.seats, b.status, b.booked_at, e.name, e.date, e.city FROM booking b JOIN event e ON b.event_id = e.id WHERE b.user_id = ? ORDER BY b.booked_at DESC`
 
@@ -1152,6 +1097,51 @@ func (h *Handler) getUserBookings(c *gin.Context) {
 		"message": "bookings retrieved successfully",
 		"data":    bookings,
 		"count":   len(bookings),
+	})
+}
+
+func (h *Handler) getPDFPresignedURL(c *gin.Context){
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+
+	user, exists := c.Get("current_user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "user not authenticated",
+		})
+		return
+	}
+	u := user.(models.User)
+
+	bId := c.Param("booking_id")
+	bookingID, err := strconv.Atoi(bId);
+	if err != nil{
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "booking ID is required || inviald booking ID format!",
+		})
+		return
+	}
+
+	bucketName := "ticket-one"
+	keyName := fmt.Sprintf("receipt/user-%d/booking_%d.pdf", u.Id, bookingID)
+
+	url, err := h.s3.GetPresignDownloadURL(ctx, bucketName, keyName, 10);
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{
+				"error": "request timeout or canceled",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to query bookings",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": fmt.Sprintf("presigned url genrated for bookingId:%d", bookingID),
+		"data": url,
 	})
 }
 
@@ -1588,6 +1578,8 @@ func main() {
 	router.PUT("/api/update/event/:id", h.orgMiddleware, h.updateEventHandler)             // working & tested
 	router.GET("/api/profile/user", h.middleware, h.getUserDetailHandler) // working & tested
 	router.GET("/api/user/bookings", h.middleware, h.getUserBookings) // working 
+	
+	router.GET("/api/pdf/booking/:booking_id", h.middleware, h.getPDFPresignedURL) // testing.... 
 
 	
 	router.GET("/api/event/seats/:id", h.getSeatsAvailabilityByEvent) //working (not in use rn)
