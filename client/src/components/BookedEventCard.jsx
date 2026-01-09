@@ -2,11 +2,8 @@ import { useMutation } from "@tanstack/react-query";
 import { useUserAuthStore } from "../store/useUserAuth";
 
 function BookedEventCard({ bookingID, title, date, location}) {
-  console.log(bookingID)
-
   const { userToken } = useUserAuthStore();
-
-
+  
   const getBookingPdfUrl = async (id) => {
     const response = await fetch(`http://localhost:8080/api/pdf/booking/${id}`,{
       method: "GET",

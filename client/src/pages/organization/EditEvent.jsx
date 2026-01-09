@@ -6,6 +6,7 @@ import { useOrgAuthStore } from "../../store/useOrgAuth";
 export default function EditEvent() {
   const navigate = useNavigate();
   const { id } = useParams();
+  console.log(id)
   const { orgToken } = useOrgAuthStore();
   const queryClient = useQueryClient();
  
@@ -55,6 +56,7 @@ export default function EditEvent() {
   }
 
   const [event, setEvent] = useState(null);
+  const [originalEvent, setOriginalEvent] = useState(null);
 
   const { data, status, error } = useQuery({
     queryKey: ["eventDetails", id],
@@ -74,6 +76,20 @@ export default function EditEvent() {
         // console.log("Image URL response:", imgRes); // remove after debugging
         imageUrl = imgRes.imageUrl;
       }
+
+      setOriginalEvent({
+        name: e.name ?? "",
+        date: e.date?.split("T")[0] ?? "",
+        time: e.time ?? "12:30",
+        address: e.address ?? "",
+        city: e.city ?? "",
+        state: e.state ?? "",
+        country: e.country ?? "",
+        capacity: e.capacity ?? 0,
+        seats_available: e.seats_available ?? 0,
+        visibility: e.visible?.toUpperCase() ?? "PUBLIC",
+        image: imageUrl,
+      });
 
       setEvent({
         name: e.name ?? "",
@@ -106,6 +122,14 @@ export default function EditEvent() {
 
   const handleUpdate = async () => {
     try {
+      // const criticalChanges = [];
+      // if(event.name !== originalEvent.name) criticalChanges.push("NAME")
+      // if(event.date !== originalEvent.date) criticalChanges.push("DATE_TIME")
+      // if(event.address !== originalEvent.address) criticalChanges.push("ADDRESS")
+      // if(event.city !== originalEvent.city) criticalChanges.push("CITY")
+      // if(event.state !== originalEvent.state) criticalChanges.push("STATE")
+      // if(event.country !== originalEvent.country) criticalChanges.push("COUNTRY")
+
       const buildDateTime = () => {
         if (!event.date || !event.time) return null;
         return new Date(`${event.date}T${event.time}`).toISOString();
@@ -120,6 +144,7 @@ export default function EditEvent() {
         country: event.country,
         capacity: event.capacity,
         visible: event.visibility.toLowerCase(),
+        // criticalChanges: criticalChanges,
       };
 
       console.log(payload)
@@ -146,6 +171,7 @@ export default function EditEvent() {
       alert(err.message);
     }
   };
+
 
   if (status === "pending") {
     return <div className="p-6">Loading event...</div>;
@@ -282,7 +308,7 @@ export default function EditEvent() {
               <input
                 type="number"
                 name="capacity"
-                min={event.seats_booked}
+                min={seatsBooked}
                 value={event.capacity}
                 onChange={handleChange}
                 className="mt-1 w-full border px-3 py-2 rounded"
