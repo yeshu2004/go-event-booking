@@ -9,7 +9,7 @@ import (
 	"github.com/yeshu2004/go-event-booking/models"
 )
 
-func GeneratePDF(bookingData *models.PDFContent) (string, error) {
+func GenerateBookingPDF(bookingData *models.PDFContent) (string, error) {
 	formattedTime := "N/A"
 	if !bookingData.EventDateTime.IsZero() {
 		formattedTime = bookingData.EventDateTime.Format("02 Jan 2006, 03:04 PM")

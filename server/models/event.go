@@ -50,3 +50,24 @@ type UpdateEventRequest struct {
 	Capacity int       `json:"capacity"`
 	Visible  string    `json:"visible"`
 }
+
+type EventChangeType string
+
+const (
+	EventDateChanged     EventChangeType = "EVENT_DATE_CHANGED"
+	EventNameChanged     EventChangeType = "EVENT_NAME_CHANGED"
+	EventLocationChanged EventChangeType = "EVENT_LOCATION_CHANGED"
+)
+
+type EventEditChange struct {
+	Type EventChangeType `json:"type"`
+	Old  string          `json:"old"`
+	New  string          `json:"new"`
+}
+
+type EventEditedPayload struct {
+	EventID  int64             `json:"event_id"`
+	Changes  []EventEditChange `json:"changes"`
+	To       []string          `json:to`
+	EditedAt time.Time         `json:"edited_at"`
+}

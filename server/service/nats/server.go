@@ -141,7 +141,7 @@ func processBookingMessage(ctx context.Context, msg []byte, awsClient *cloud.S3S
 	}
 
 	// genrate pdf
-	fileName, err := pdf.GeneratePDF(&data)
+	fileName, err := pdf.GenerateBookingPDF(&data)
 	if err != nil {
 		return err
 	}
@@ -180,4 +180,107 @@ func processBookingMessage(ctx context.Context, msg []byte, awsClient *cloud.S3S
 	}
 	log.Printf("confirmation email sent to %s for booking ID %d", data.UserEmail, data.BookingID)
 	return nil
+}
+
+
+func (n *NATSIns) CreateEventStream(ctx context.Context) error {
+	_, err := n.js.CreateStream(ctx, jetstream.StreamConfig{
+		Name:        "EVENT",
+		Description: "Event stream",
+		Subjects:    []string{"EVENT.*"},
+		Storage:     jetstream.FileStorage, // on disk storage
+		Retention:   jetstream.WorkQueuePolicy,
+		Discard:     jetstream.DiscardOld, // remove old message when old
+		MaxMsgs:  -1, // unlimit
+		MaxBytes: -1,
+	})
+
+	if err != nil && err != jetstream.ErrStreamNameAlreadyInUse {
+		return fmt.Errorf("creating event stream error: %w", err)
+	}
+
+	return nil
+}
+
+// PublishEditEvent is used to publish editEvent event into nats stream server 
+func (n *NATSIns) PublishEditEvent(ctx context.Context, eventID int, payload []byte) error{
+	ack, err := n.js.Publish(ctx, "EVENT.edit", payload, jetstream.WithMsgID(fmt.Sprintf("edit-event-%d-%d", eventID, time.Now().UnixNano()),
+	));
+	if err != nil {
+		return fmt.Errorf("error in publishing new edit-event(%d) event: %v",eventID, err)
+	}
+	log.Printf("published EVENT.edit to stream=%s seq=%d", ack.Stream, ack.Sequence)
+	return nil
+}
+
+func (n *NATSIns) CreateEditEventConsumer(ctx context.Context) error{
+	_, err := n.js.CreateOrUpdateConsumer(ctx, "EVENT", jetstream.ConsumerConfig{
+		Name:           "edit-event-worker",
+		Durable:        "edit-event-worker",
+		AckPolicy:      jetstream.AckExplicitPolicy,
+		AckWait:        2 * time.Minute,
+		DeliverPolicy:  jetstream.DeliverAllPolicy,
+		FilterSubject:  "EVENT.edit",
+		MaxDeliver:     5,
+	})
+
+
+	if err != nil {
+		return fmt.Errorf("consumer editEvent creation error: %w", err)
+	}
+
+	return nil
+}
+
+func (n *NATSIns) ConsumeEditEvent(ctx context.Context) error{
+	c, err := n.js.Consumer(ctx, "EVENT", "edit-event-worker");
+	if err != nil {
+		return fmt.Errorf("get consumer error: %w", err)
+	}
+	fmt.Println("edit event consumer starting...")
+
+	for {
+		select {
+		case <- ctx.Done():
+			log.Println("shutting down edit-evnt event consumer...")
+			return nil
+		default: 
+			msgs, err := c.Fetch(1, jetstream.FetchMaxWait(5*time.Second));
+			if err != nil{
+				if err == jetstream.ErrNoMessages {
+					continue
+				}
+				log.Println("fetch error:", err)
+				continue
+			}
+
+			for msg := range msgs.Messages(){
+				if err := processEditEventMessage(msg.Data()); err != nil{
+					log.Printf("error in processing edit-event data: %v", err)
+					_ = msg.NakWithDelay(10 * time.Second)
+					continue 
+				}
+
+				// acknowledges i.e message consumed
+				if err := msg.Ack(); err != nil {
+					log.Println("ack failed:", err)
+				}
+			}
+		}
+	}
+}
+
+func processEditEventMessage(msg []byte) error{
+	var payload models.EventEditedPayload;
+	if err := json.Unmarshal(msg, &payload); err != nil {
+		log.Printf("invalid event edit payload: %v", err)
+	}
+
+	for _, email := range payload.To{
+		if err := mail.SendEditEventMail(email, payload); err != nil{
+			return err
+		}
+		fmt.Printf("event(%d) update mail send to %s", payload.EventID, email)
+	}
+	return nil;
 }

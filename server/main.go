@@ -936,6 +936,7 @@ func (h *Handler) getEventByIdHandler(c *gin.Context) {
 
 }
 
+// used for event image upload
 func (h *Handler) getPresignedUrl(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
@@ -1100,7 +1101,9 @@ func (h *Handler) getUserBookings(c *gin.Context) {
 	})
 }
 
-func (h *Handler) getPDFPresignedURL(c *gin.Context){
+// getPDFPresignedURL handler returns booked ticket pdf
+// from s3 service to client, having param as bookingID
+func (h *Handler) getPDFPresignedURL(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 
@@ -1114,8 +1117,8 @@ func (h *Handler) getPDFPresignedURL(c *gin.Context){
 	u := user.(models.User)
 
 	bId := c.Param("booking_id")
-	bookingID, err := strconv.Atoi(bId);
-	if err != nil{
+	bookingID, err := strconv.Atoi(bId)
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "booking ID is required || inviald booking ID format!",
 		})
@@ -1125,7 +1128,7 @@ func (h *Handler) getPDFPresignedURL(c *gin.Context){
 	bucketName := "ticket-one"
 	keyName := fmt.Sprintf("receipt/user-%d/booking_%d.pdf", u.Id, bookingID)
 
-	url, err := h.s3.GetPresignDownloadURL(ctx, bucketName, keyName, 10);
+	url, err := h.s3.GetPresignDownloadURL(ctx, bucketName, keyName, 10)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 			c.JSON(http.StatusGatewayTimeout, gin.H{
@@ -1141,7 +1144,7 @@ func (h *Handler) getPDFPresignedURL(c *gin.Context){
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": fmt.Sprintf("presigned url genrated for bookingId:%d", bookingID),
-		"data": url,
+		"data":    url,
 	})
 }
 
@@ -1399,17 +1402,14 @@ func (h *Handler) updateEventHandler(c *gin.Context) {
 	// rollback safety
 	defer tx.Rollback()
 
-	// 🔒 lock row
+	// lock row
 	var oldCapacity, oldAvailable int
+	var oldDate time.Time
+	var oldName, oldAddress, oldCity, oldState, oldCountry string
+
 	err = tx.QueryRowContext(
 		ctx,
-		`SELECT capacity, seats_available
-		 FROM event
-		 WHERE id = ? AND org_id = ?
-		 FOR UPDATE`,
-		eventId,
-		org.Id,
-	).Scan(&oldCapacity, &oldAvailable)
+		`SELECT name, capacity, seats_available, date, address, city, state, country FROM event WHERE id = ? AND org_id = ? FOR UPDATE`, eventId, org.Id).Scan(&oldName, &oldCapacity, &oldAvailable, &oldDate, &oldAddress, &oldCity, &oldState, &oldCountry)
 
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
@@ -1474,6 +1474,68 @@ func (h *Handler) updateEventHandler(c *gin.Context) {
 		return
 	}
 
+	// catch critical changes
+	changes := make([]models.EventEditChange, 0)
+
+	if !oldDate.Equal(updatedEvent.DateTime) {
+		changes = append(changes, models.EventEditChange{
+			Type: models.EventDateChanged,
+			Old:  oldDate.Format(time.RFC3339),
+			New:  updatedEvent.DateTime.Format(time.RFC3339),
+		})
+	}
+
+	if oldName != updatedEvent.Name {
+		changes = append(changes, models.EventEditChange{
+			Type: models.EventNameChanged,
+			Old:  oldName,
+			New:  updatedEvent.Name,
+		})
+	}
+
+	oldLocation := fmt.Sprintf("%s, %s, %s, %s", oldAddress, oldCity, oldState, oldCountry)
+
+	newLocation := fmt.Sprintf("%s, %s, %s, %s", updatedEvent.Address, updatedEvent.City, updatedEvent.State, updatedEvent.Country)
+
+	if oldLocation != newLocation {
+		changes = append(changes, models.EventEditChange{
+			Type: models.EventLocationChanged,
+			Old:  oldLocation,
+			New:  newLocation,
+		})
+	}
+
+	// send update email if critical changes are changed
+	if seatsBooked > 0 && len(changes) > 0 {
+		p := models.EventEditedPayload{
+			EventID:  int64(eventId),
+			Changes:  changes,
+			EditedAt: time.Now().UTC(),
+		}
+		rows, err := h.db.Query("SELECT DISTINCT u.email FROM booking b JOIN user u ON u.id = b.user_id WHERE b.event_id = ? AND b.status = 'CONFIRMED'", eventId);
+		if err != nil{
+			fmt.Print(err);
+		}
+		defer rows.Close();
+
+		for rows.Next(){
+			var userEmail string
+			if err := rows.Scan(&userEmail); err != nil {
+				log.Printf("row scan error: %v", err);
+			}
+			p.To = append(p.To, userEmail);
+		}
+
+		paylaod, err := json.Marshal(p)
+		if err != nil {
+			log.Printf("failed to marshal event edit payload: %v", err)
+		}
+
+		if err := h.natsIns.PublishEditEvent(ctx, eventId, paylaod); err != nil {
+			log.Printf("failed to publish edit-event event: %v", err)
+		}
+	}
+
 	// redis cache verison update
 	if h.redisClient != nil {
 		if err := h.redisClient.UpdateEventVersion(ctx); err != nil {
@@ -1525,7 +1587,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	if err := natsIns.CreateEventStream(ctx); err != nil{
+		fmt.Println(err)
+	}
 	natsIns.CreateBookingStream(ctx)
+
 
 	h := &Handler{db: db, redisClient: r, s3: s3Service, natsIns: natsIns}
 	// h := &Handler{db: db}
@@ -1576,12 +1642,11 @@ func main() {
 	router.PUT("/api/delete/event/:id", h.DeletEvenHandler)                                // working & tested
 	router.GET("/api/organization/my-events", h.orgMiddleware, h.listEventsByOrganization) // working & tested
 	router.PUT("/api/update/event/:id", h.orgMiddleware, h.updateEventHandler)             // working & tested
-	router.GET("/api/profile/user", h.middleware, h.getUserDetailHandler) // working & tested
-	router.GET("/api/user/bookings", h.middleware, h.getUserBookings) // working 
-	
-	router.GET("/api/pdf/booking/:booking_id", h.middleware, h.getPDFPresignedURL) // testing.... 
+	router.GET("/api/profile/user", h.middleware, h.getUserDetailHandler)                  // working & tested
+	router.GET("/api/user/bookings", h.middleware, h.getUserBookings)                      // working
 
-	
+	router.GET("/api/pdf/booking/:booking_id", h.middleware, h.getPDFPresignedURL) // testing....
+
 	router.GET("/api/event/seats/:id", h.getSeatsAvailabilityByEvent) //working (not in use rn)
 	router.GET("/api/events/:city", h.getEventByCityHandler)
 	// router.GET("/api/bookings/events/:id", h.getTotalSeatsBooked)
