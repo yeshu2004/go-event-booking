@@ -16,8 +16,14 @@ func main() {
 	}
 
 	// Safe to call (idempotent)
-	natsIns.CreateBookingStream(ctx)
-	natsIns.CreateBookingConsumer(ctx)
+	if err := natsIns.CreateBookingStream(ctx); err != nil {
+		log.Fatal("stream creation failed:", err)
+	}
+
+	if err := natsIns.CreateBookingConsumer(ctx); err != nil {
+		log.Fatal("consumer creation failed:", err)
+	}
+
 
 	log.Println("Booking worker started")
 	if err := natsIns.ConsumeBookingEvent(ctx); err != nil {

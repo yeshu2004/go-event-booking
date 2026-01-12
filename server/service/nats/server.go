@@ -57,15 +57,6 @@ func (n *NATSIns) CreateBookingStream(ctx context.Context) error {
 	return nil
 }
 
-// PublishBooingEvent is used to publish booking event into nats stream
-func (n *NATSIns) PublishBookingEvent(ctx context.Context, bookingID int, payload []byte) error {
-	_, err := n.js.Publish(ctx, "BOOKING.new", payload, jetstream.WithMsgID(fmt.Sprintf("booking-%d", bookingID)))
-	if err != nil {
-		return fmt.Errorf("error in publishing new booking event: %v", err)
-	}
-	return nil
-}
-
 func (n *NATSIns) CreateBookingConsumer(ctx context.Context) error {
 	_, err := n.js.CreateOrUpdateConsumer(ctx, "BOOKINGS", jetstream.ConsumerConfig{
 		Name:    "booking-worker",
@@ -74,7 +65,7 @@ func (n *NATSIns) CreateBookingConsumer(ctx context.Context) error {
 		AckPolicy: jetstream.AckExplicitPolicy,
 		AckWait:   2 * time.Minute,
 
-		DeliverPolicy: jetstream.DeliverNewPolicy,
+		DeliverPolicy: jetstream.DeliverAllPolicy,
 		ReplayPolicy:  jetstream.ReplayInstantPolicy,
 
 		MaxDeliver:    5, // retry 5 times
@@ -87,6 +78,15 @@ func (n *NATSIns) CreateBookingConsumer(ctx context.Context) error {
 		return fmt.Errorf("consumer creation error: %w", err)
 	}
 
+	return nil
+}
+
+// PublishBooingEvent is used to publish booking event into nats stream
+func (n *NATSIns) PublishBookingEvent(ctx context.Context, bookingID int, payload []byte) error {
+	_, err := n.js.Publish(ctx, "BOOKING.new", payload, jetstream.WithMsgID(fmt.Sprintf("booking-%d", bookingID)))
+	if err != nil {
+		return fmt.Errorf("error in publishing new booking event: %v", err)
+	}
 	return nil
 }
 

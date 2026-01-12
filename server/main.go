@@ -1275,6 +1275,82 @@ func (h *Handler) seatBookingHandler(c *gin.Context) {
 
 }
 
+func (h *Handler) cancelTicketHandler(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+
+	user, exists := c.Get("current_user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "user not found in context",
+		})
+		return
+	}
+	u := user.(models.User);
+
+	// 1. fetch booking id
+	i := c.Param("booking_id")
+	bId, err := strconv.Atoi(i)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invaild booking id || wrong format",
+		})
+		return
+	}
+
+	// begain transaction
+	tx, err := h.db.BeginTx(ctx, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "begainTx err:" + err.Error(),
+		})
+		return
+	}
+	defer tx.Rollback()
+	
+	var eventID int
+	var status string
+	q := "SELECT b.event_id, b.status FROM booking b JOIN event e ON b.event_id = e.id WHERE b.id = ? AND b.user_id = ? FOR UPDATE"
+	if err := tx.QueryRowContext(ctx, q, bId, u.Id).Scan(&eventID, &status); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "booking not found",
+		})
+		return
+	}
+
+	if status == "CANCELLED" {
+		tx.Commit()
+		c.JSON(http.StatusOK, gin.H{
+			"message": "booking already cancelled",
+			"alreadyCancelled": true,
+		})
+		return
+	}
+	// update booking first
+	_, err = tx.ExecContext(ctx, "UPDATE booking SET status = 'CANCELLED' WHERE id = ?", bId)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// update seats after i.e seats_available += 1
+	_, err = tx.ExecContext(ctx, "UPDATE event SET seats_available = seats_available + 1 WHERE id =? ", eventID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "commit failed"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": fmt.Sprintf("ticket (%d) cancelled", bId),
+		"data":    bId,
+	})
+}
+
 // listEventsByOrganization handler is to list all
 // events listed by a perticular organization
 func (h *Handler) listEventsByOrganization(c *gin.Context) {
@@ -1512,18 +1588,18 @@ func (h *Handler) updateEventHandler(c *gin.Context) {
 			Changes:  changes,
 			EditedAt: time.Now().UTC(),
 		}
-		rows, err := h.db.Query("SELECT DISTINCT u.email FROM booking b JOIN user u ON u.id = b.user_id WHERE b.event_id = ? AND b.status = 'CONFIRMED'", eventId);
-		if err != nil{
-			fmt.Print(err);
+		rows, err := h.db.Query("SELECT DISTINCT u.email FROM booking b JOIN user u ON u.id = b.user_id WHERE b.event_id = ? AND b.status = 'CONFIRMED'", eventId)
+		if err != nil {
+			fmt.Print(err)
 		}
-		defer rows.Close();
+		defer rows.Close()
 
-		for rows.Next(){
+		for rows.Next() {
 			var userEmail string
 			if err := rows.Scan(&userEmail); err != nil {
-				log.Printf("row scan error: %v", err);
+				log.Printf("row scan error: %v", err)
 			}
-			p.To = append(p.To, userEmail);
+			p.To = append(p.To, userEmail)
 		}
 
 		paylaod, err := json.Marshal(p)
@@ -1587,11 +1663,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err := natsIns.CreateEventStream(ctx); err != nil{
+	if err := natsIns.CreateEventStream(ctx); err != nil {
 		fmt.Println(err)
 	}
 	natsIns.CreateBookingStream(ctx)
-
 
 	h := &Handler{db: db, redisClient: r, s3: s3Service, natsIns: natsIns}
 	// h := &Handler{db: db}
@@ -1643,9 +1718,10 @@ func main() {
 	router.GET("/api/organization/my-events", h.orgMiddleware, h.listEventsByOrganization) // working & tested
 	router.PUT("/api/update/event/:id", h.orgMiddleware, h.updateEventHandler)             // working & tested
 	router.GET("/api/profile/user", h.middleware, h.getUserDetailHandler)                  // working & tested
-	router.GET("/api/user/bookings", h.middleware, h.getUserBookings)                      // working
-
-	router.GET("/api/pdf/booking/:booking_id", h.middleware, h.getPDFPresignedURL) // testing....
+	router.GET("/api/user/bookings", h.middleware, h.getUserBookings)                      // working & tested
+	
+	router.GET("/api/pdf/booking/:booking_id", h.middleware, h.getPDFPresignedURL)         // tested...
+	router.PUT("/api/booking/:booking_id", h.middleware, h.cancelTicketHandler) // testing/...
 
 	router.GET("/api/event/seats/:id", h.getSeatsAvailabilityByEvent) //working (not in use rn)
 	router.GET("/api/events/:city", h.getEventByCityHandler)
