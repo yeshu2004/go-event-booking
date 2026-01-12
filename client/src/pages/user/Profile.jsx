@@ -169,7 +169,7 @@ function Profile() {
                     title={booking.name}
                     date={booking.date}
                     location={booking.city}
-                    status={"upcoming"} // upcoming | past
+                    status={booking.status} // CONFIRMED/CANCELLED/PENDING
                   />
                 ))}
               </div>
