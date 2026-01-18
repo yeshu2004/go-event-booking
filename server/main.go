@@ -1173,12 +1173,13 @@ func (h *Handler) seatBookingHandler(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": err.Error(),
 		})
+		return;
 	}
 
 	// booking details recived as body from user i.e number of seats
 	var b models.BookingRequest
 	if err := c.ShouldBindJSON(&b); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
+		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "json binding error:" + err.Error(),
 		})
 		return
@@ -1191,7 +1192,9 @@ func (h *Handler) seatBookingHandler(c *gin.Context) {
 	}
 
 	// begain transactional query
-	tx, err := h.db.BeginTx(ctx, nil)
+	tx, err := h.db.BeginTx(ctx, &sql.TxOptions{
+		Isolation: sql.LevelReadCommitted,
+	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "begainTx err:" + err.Error(),
@@ -1202,23 +1205,26 @@ func (h *Handler) seatBookingHandler(c *gin.Context) {
 	defer tx.Rollback()
 
 	// check if we do have enough seats_available
-	var enough bool
-	if err := tx.QueryRowContext(ctx, "SELECT (seats_available >= ?) FROM event WHERE id = ?", b.Seats, eventId).Scan(&enough); err != nil {
+	var seatsAvailable int
+	err = tx.QueryRowContext(
+		ctx,
+		"SELECT seats_available FROM event WHERE id = ? FOR UPDATE",
+		eventId,
+	).Scan(&seatsAvailable)
+
+	if err != nil {
 		if err == sql.ErrNoRows {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "no such event exists",
-			})
+			c.JSON(http.StatusNotFound, gin.H{"error": "event not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": err.Error(),
-		})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
+
 	// if seats are available as per user demand
-	if !enough {
-		c.JSON(http.StatusBadRequest, gin.H{
+	if seatsAvailable < int(b.Seats) {
+		c.JSON(http.StatusConflict, gin.H{
 			"error": "not enough seats available",
 		})
 		return
@@ -1226,7 +1232,7 @@ func (h *Handler) seatBookingHandler(c *gin.Context) {
 
 	// update the event seats_available
 	query := "UPDATE event SET seats_available = seats_available - ? WHERE id = ?"
-	_, err = tx.ExecContext(ctx, query, b.Seats, eventId)
+	result, err := tx.ExecContext(ctx, query, b.Seats, eventId)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": err.Error(),
@@ -1234,20 +1240,27 @@ func (h *Handler) seatBookingHandler(c *gin.Context) {
 		return
 	}
 
+	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
+		c.JSON(http.StatusConflict, gin.H{
+			"error": errors.New("insufficient seats"),
+		})
+		return;
+	}
+
 	//  insert record in booking table
 	query = "INSERT INTO booking (event_id, user_id, seats) VALUES (?, ?, ?)"
 	res, err := tx.ExecContext(ctx, query, eventId, u.Id, b.Seats)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": err.Error(),
+			"error": "insufficient seats",
 		})
+		return;
 	}
 
-	bookingID, _ := res.LastInsertId()
+	bookingID, err := res.LastInsertId()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": err.Error(),
-		})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -1286,7 +1299,7 @@ func (h *Handler) cancelTicketHandler(c *gin.Context) {
 		})
 		return
 	}
-	u := user.(models.User);
+	u := user.(models.User)
 
 	// 1. fetch booking id
 	i := c.Param("booking_id")
@@ -1307,7 +1320,7 @@ func (h *Handler) cancelTicketHandler(c *gin.Context) {
 		return
 	}
 	defer tx.Rollback()
-	
+
 	var eventID int
 	var status string
 	q := "SELECT b.event_id, b.status FROM booking b JOIN event e ON b.event_id = e.id WHERE b.id = ? AND b.user_id = ? FOR UPDATE"
@@ -1321,7 +1334,7 @@ func (h *Handler) cancelTicketHandler(c *gin.Context) {
 	if status == "CANCELLED" {
 		tx.Commit()
 		c.JSON(http.StatusOK, gin.H{
-			"message": "booking already cancelled",
+			"message":          "booking already cancelled",
 			"alreadyCancelled": true,
 		})
 		return
@@ -1719,9 +1732,9 @@ func main() {
 	router.PUT("/api/update/event/:id", h.orgMiddleware, h.updateEventHandler)             // working & tested
 	router.GET("/api/profile/user", h.middleware, h.getUserDetailHandler)                  // working & tested
 	router.GET("/api/user/bookings", h.middleware, h.getUserBookings)                      // working & tested
-	
-	router.GET("/api/pdf/booking/:booking_id", h.middleware, h.getPDFPresignedURL)         // tested...
-	router.PUT("/api/booking/:booking_id", h.middleware, h.cancelTicketHandler) // testing/...
+
+	router.GET("/api/pdf/booking/:booking_id", h.middleware, h.getPDFPresignedURL) // tested...
+	router.PUT("/api/booking/:booking_id", h.middleware, h.cancelTicketHandler)    // testing/...
 
 	router.GET("/api/event/seats/:id", h.getSeatsAvailabilityByEvent) //working (not in use rn)
 	router.GET("/api/events/:city", h.getEventByCityHandler)

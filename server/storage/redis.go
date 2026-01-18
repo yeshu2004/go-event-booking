@@ -41,15 +41,8 @@ func GetRedisClient() (*RedisServer, error) {
 }
 
 func (r *RedisServer) UpdateEventVersion(ctx context.Context) error {
-	v, err := r.GetEventVerison(ctx);
-	if v == -1{
-		return fmt.Errorf("version error:(%d)", v)
-	}
-	if err != nil{
-		return err
-	}
 	key := eventVerisonKey
-	return r.rdx.Set(ctx, key, v+1, 0).Err();
+	return r.rdx.Incr(ctx, key).Err()
 }
 
 func (r *RedisServer) GetEventVerison(ctx context.Context)(int, error){
